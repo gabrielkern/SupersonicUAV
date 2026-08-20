@@ -31,7 +31,7 @@ def initialize_vsp():
 
     return vsp.ErrorMgrSingleton.getInstance()
 
-def create_wing(planform_area):
+def create_wing(config):
     """
     Create the main wing.
     """
@@ -43,27 +43,8 @@ def create_wing(planform_area):
     wing_id = vsp.AddGeom("WING")
     vsp.SetGeomName(wing_id, "Main_Wing")
 
-    # Positioning items
-    AR_INBOARD = 0.20465
-    AREA_INBOARD = 0.26081 * planform_area
-    TAPER_INBOARD = 0.55555
-    TE_SWEEP_INBOARD = 20
-
-    AR_OUTBOARD = 1.02183
-    AREA_OUTBOARD = 0.23919 * planform_area
-    TAPER_OUTBOARD = 0.2
-    TE_SWEEP_OUTBOARD = 20
-
-    inboard_span = np.sqrt(AR_INBOARD*AREA_INBOARD)
-    root_chord = (2*AREA_INBOARD)/((1+TAPER_INBOARD)*inboard_span)
-    middle_chord = root_chord * TAPER_INBOARD
-    tip_chord = middle_chord * TAPER_OUTBOARD
-    outboard_span = np.sqrt(AR_OUTBOARD*AREA_OUTBOARD)
-    body_length = 1.55 * root_chord
-    x_wing = 0.22222 * body_length
-
     # Set absolute positioning
-    vsp.SetParmVal(wing_id, "X_Rel_Location", "XForm", x_wing)
+    vsp.SetParmVal(wing_id, "X_Rel_Location", "XForm", config['x_wing'])
     vsp.SetParmVal(wing_id, "Y_Rel_Location", "XForm", 0.0)
     vsp.SetParmVal(wing_id, "Z_Rel_Location", "XForm", 0.0)
 
@@ -79,10 +60,10 @@ def create_wing(planform_area):
     xsurf_id = vsp.GetXSecSurf(wing_id, 0)
 
     # Inboard properties
-    vsp.SetParmVal(wing_id, "Root_Chord", "XSec_1", root_chord)
-    vsp.SetParmVal(wing_id, "Tip_Chord", "XSec_1", middle_chord)
-    vsp.SetParmVal(wing_id, "Span", "XSec_1", inboard_span)
-    vsp.SetParmVal(wing_id, "Sweep", "XSec_1", TE_SWEEP_INBOARD)
+    vsp.SetParmVal(wing_id, "Root_Chord", "XSec_1", config['root_chord'])
+    vsp.SetParmVal(wing_id, "Tip_Chord", "XSec_1", config['middle_chord'])
+    vsp.SetParmVal(wing_id, "Span", "XSec_1", config['inboard_span'])
+    vsp.SetParmVal(wing_id, "Sweep", "XSec_1", config['te_sweep_inboard'])
     vsp.SetParmVal(wing_id, "Sec_Sweep_Location", "XSec_1", 0.5)
     vsp.SetParmVal(wing_id, "Sweep_Location", "XSec_1", 1.0)
     vsp.SetParmVal(wing_id, "SectTess_U", "XSec_1", 6)
@@ -90,10 +71,10 @@ def create_wing(planform_area):
     vsp.SetParmVal(wing_id, "OutCluster", "XSec_1", 1.0)
 
     vsp.InsertXSec(wing_id, 1, vsp.XS_SIX_SERIES)
-    vsp.SetParmVal(wing_id, "Root_Chord", "XSec_2", middle_chord)
-    vsp.SetParmVal(wing_id, "Tip_Chord", "XSec_2", tip_chord)
-    vsp.SetParmVal(wing_id, "Span", "XSec_2", outboard_span)
-    vsp.SetParmVal(wing_id, "Sweep", "XSec_2", TE_SWEEP_OUTBOARD)
+    vsp.SetParmVal(wing_id, "Root_Chord", "XSec_2", config['middle_chord'])
+    vsp.SetParmVal(wing_id, "Tip_Chord", "XSec_2", config['tip_chord'])
+    vsp.SetParmVal(wing_id, "Span", "XSec_2", config['outboard_span'])
+    vsp.SetParmVal(wing_id, "Sweep", "XSec_2", config['te_sweep_outboard'])
     vsp.SetParmVal(wing_id, "Sec_Sweep_Location", "XSec_2", 0.5)
     vsp.SetParmVal(wing_id, "Sweep_Location", "XSec_2", 1.0)
     vsp.SetParmVal(wing_id, "SectTess_U", "XSec_2", 8)
@@ -105,12 +86,12 @@ def create_wing(planform_area):
     num_xsec = vsp.GetNumXSec(xsurf_id)
     print(f"DEBUG create_wing: Applying airfoil to {num_xsec} cross-sections")
     for i in range(num_xsec):
-        xsec_id = vsp.GetXSec(xsurf_id, i)
         vsp.ChangeXSecShape(xsurf_id, i, vsp.XS_SIX_SERIES)
-        vsp.SetParmVal(xsec_id, "Series", f"XSecCurve_{i+1}", 0.0)
-        vsp.SetParmVal(xsec_id, "ThickChord", f"XSecCurve_{i+1}", 0.04)
+        xsec_id = vsp.GetXSec(xsurf_id, i)
+        vsp.SetParmVal(vsp.GetXSecParm(xsec_id, "Series"), 0.0)
+        vsp.SetParmVal(vsp.GetXSecParm(xsec_id, "ThickChord"), config['thickness'])
 
-    # Set tessellation parameters   
+    # Set tessellation parameters
     vsp.SetParmVal(wing_id, "Tess_W", "Shape", 13)
     vsp.SetParmVal(wing_id, "LECluster", "WingGeom", 1.0)
     vsp.SetParmVal(wing_id, "TECluster", "WingGeom", 1.0)
@@ -123,7 +104,7 @@ def create_wing(planform_area):
     print(f"Wing created with ID: {wing_id}")
     return wing_id
 
-def create_fuselage(planform_area):
+def create_fuselage(config):
     """
     Create the fuselage with multiple cross-sections.
 
@@ -138,15 +119,6 @@ def create_fuselage(planform_area):
     print("\n" + "=" * 60)
     print("Creating Fuselage...")
     print("=" * 60)
-
-    # Positioning items
-    AR_INBOARD = 0.20465
-    AREA_INBOARD = 0.26081 * planform_area
-    TAPER_INBOARD = 0.55555
-
-    inboard_span = np.sqrt(AR_INBOARD*AREA_INBOARD)
-    root_chord = (2*AREA_INBOARD)/((1+TAPER_INBOARD)*inboard_span)
-    body_length = 1.55 * root_chord
 
     # Add fuselage with Stack
     fuse_id = vsp.AddGeom("STACK")
@@ -183,8 +155,8 @@ def create_fuselage(planform_area):
     # Station 1 (Main Body Start) - Circle
     vsp.ChangeXSecShape(xsurf_id, 1, vsp.XS_CIRCLE)
     xsec_1 = vsp.GetXSec(xsurf_id, 1)
-    vsp.SetParmVal(vsp.GetXSecParm(xsec_1, "Circle_Diameter"), 0.2 * planform_area)
-    vsp.SetParmVal(vsp.GetXSecParm(xsec_1, "XDelta"), body_length * (1/2.25))
+    vsp.SetParmVal(vsp.GetXSecParm(xsec_1, "Circle_Diameter"), config['diameter'])
+    vsp.SetParmVal(vsp.GetXSecParm(xsec_1, "XDelta"), config['body_length'] * (1/2.25))
     vsp.SetParmVal(vsp.GetXSecParm(xsec_1, "SectTess_U"), 6)
 
     vsp.SetParmVal(vsp.GetXSecParm(xsec_1, "AllSym"), 1)
@@ -193,8 +165,8 @@ def create_fuselage(planform_area):
     # Station 2 (Main Body Mid) - Circle (same as Station 1)
     vsp.InsertXSec(fuse_id, 1, vsp.XS_CIRCLE)
     xsec_2 = vsp.GetXSec(xsurf_id, 2)
-    vsp.SetParmVal(vsp.GetXSecParm(xsec_2, "Circle_Diameter"), 0.2 * planform_area)
-    vsp.SetParmVal(vsp.GetXSecParm(xsec_2, "XDelta"), body_length * (0.75/2.25))
+    vsp.SetParmVal(vsp.GetXSecParm(xsec_2, "Circle_Diameter"), config['diameter'])
+    vsp.SetParmVal(vsp.GetXSecParm(xsec_2, "XDelta"), config['body_length'] * (0.75/2.25))
     vsp.SetParmVal(vsp.GetXSecParm(xsec_2, "SectTess_U"), 6)
 
     vsp.SetParmVal(vsp.GetXSecParm(xsec_2, "AllSym"), 1)
@@ -203,7 +175,7 @@ def create_fuselage(planform_area):
     # Station 3 (Tail) - Point
     vsp.InsertXSec(fuse_id, 2, vsp.XS_POINT)
     xsec_3 = vsp.GetXSec(xsurf_id, 3)
-
+    vsp.SetParmVal(vsp.GetXSecParm(xsec_3, "XDelta"), config['body_length'] * (0.5/2.25))
     vsp.SetParmVal(vsp.GetXSecParm(xsec_3, "AllSym"), 1)
     vsp.SetParmVal(vsp.GetXSecParm(xsec_3, "TopLAngle"), -15.0)
 
@@ -244,7 +216,7 @@ def export_model(filename="Mach1_Sizing.vsp3"):
         print(f"Error exporting model: {e}")
         return False
 
-def main(planform_area):
+def main(config):
     """Main function to create the stability test plane."""
     print("=" * 60)
     print("Stability Test Plane Generator")
@@ -257,8 +229,8 @@ def main(planform_area):
 
     try:
         # Create all aircraft components (all these functions print, but we're not calling them with verbose)
-        wing_id = create_wing(planform_area)
-        fuse_id = create_fuselage(planform_area)
+        wing_id = create_wing(config)
+        fuse_id = create_fuselage(config)
 
         # Create sets for analysiss
         create_sets(wing_id,fuse_id)

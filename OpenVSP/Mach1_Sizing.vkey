@@ -3,8 +3,8 @@
 2
 
 # part#,geom#,surf#,gname,gid,thick,plate,copy#,geomcopy#
-1,0,0,Main_Wing_C,EGDADDKCPA,0,3,1,1
-2,0,1,Main_Wing_C,EGDADDKCPA,0,3,2,1
+1,0,0,Main_Wing_C,ISUVSFOSTJ,0,3,1,1
+2,0,1,Main_Wing_C,ISUVSFOSTJ,0,3,2,1
 
 2
 

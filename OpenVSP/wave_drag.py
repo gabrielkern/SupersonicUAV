@@ -11,8 +11,9 @@ def transonic_wave_drag(Mach, CL, t_c, eff_sweep, technology_factor=0.87) -> flo
 
     # Solve for critical mach number from this divergence number
     M_crit = M_DD - (0.1/80)**(1/3)
+    print(np.shape(M_crit))
 
     # Final drag
-    CD_wave = (20(Mach - M_crit)**4)
+    CD_wave = [20*(Mach - M)**4 if Mach > M else 0 for M in M_crit]
 
     return CD_wave

@@ -143,63 +143,15 @@ def MAC(chords, spans, sweeps):
         'quarter_mac_le_distance': quarter_mac_le_distance,
     }
 
-
-# ============================================================================
-# PARAMETER RANGES
-# ============================================================================
-
-CONFIG_RANGES = {
-    'wing_span': (3, 5),            # ft
-    'wing_area': (2, 5),            # ft^2
-    'taper_ratio': (0.5, 1.0),      # -
-    'wing_relative_pos': (0.25, 0.6),  # -
-    'cargo_units': (1, 15),         # 3pucks+1duck
-    'banner_length': (0.833333, 30),  # ft
-    'propeller': (0, 38),            # -
-    'airfoil_a0': (0.1, 0.35),      # -
-    'airfoil_a1u': (0.05, 0.35),    # -
-    'airfoil_a1l': (-0.05, 0.2),    # -
-    'airfoil_a2u': (0.0, 0.3),      # -
-    'airfoil_a2l': (-0.05, 0.2),    # -
-    'motor_kv': (200, 1200),        # rpm/V
-    'battery_cells': (2, 10),       # -
-    'battery_energy': (20, 100),     # Wh
-}
-
-PROPELLERS = [
-    (10,10),(11,7),(11,8),(11,10),(11,12),(12,6),(12,8),(12,10),(12,12),(13,8),(13,10),(14,7),(14,10),(14,12),(14,14),(15,7),(15,8),
-    (15,10),(16,4),(16,6),(16,8),(16,10),(16,12),(17,6),(17,8),(17,10),(17,12),(18,8),(18,10),(18,12),(19,8),(19,10),(19,12),(20,8),
-    (20,10),(20,11),(20,13),(20,15)
-    ]
-NUM_PROP = 38
-
-
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
 def calculate_total_weight(cargo_units: int) -> float:
     """Calculate total aircraft empty weight based on cargo capacity."""
-    
+
     return 3.87 + (0.105 * cargo_units) + (0.0231 * (cargo_units ** 2)) + \
            (1.74E-03 * (cargo_units ** 3))
-
-def clean_aero_results(aero_results: dict) -> dict:
-    """Remove non-monotonic CL values from aerodynamic data."""
-    prev_item = -np.inf
-    remove_indices = []
-
-    for index, item in enumerate(aero_results['CL']):
-        if item > prev_item:
-            prev_item = item
-        else:
-            remove_indices.append(index)
-
-    for index in reversed(remove_indices):
-        for key in aero_results.keys():
-            aero_results[key].remove(aero_results[key][index])
-
-    return aero_results
 
 def create_lift_drag_mapper(aero_results: dict, parasitic_drag: float, wave_drag: float):
     """Create CL -> total CD interpolation function."""
@@ -207,35 +159,19 @@ def create_lift_drag_mapper(aero_results: dict, parasitic_drag: float, wave_drag
     return interp1d(aero_results['CL'], total_drag,
                    kind='cubic', fill_value='extrapolate')
 
-def print_compact_csv(run_num: int, total_runs: int,
-                     config: dict, result: dict):
+def print_compact_csv(result: dict):
     """Print single-line CSV output for quiet mode."""
-    # Format: run_num,total,param1,param2,...,lap_m2,lap_m3,reward_m1,reward_m2,reward_m3,reward_gm,status
 
-    # 15 input parameters in fixed order
+    # 2 input parameters in fixed order
     params = [
-        config['wing_span'], config['wing_area'], config['taper_ratio'],
-        config['wing_relative_pos'], config['cargo_units'], config['banner_length'],
-        config['propeller'], config['airfoil_a0'], config['airfoil_a1u'],
-        config['airfoil_a1l'], config['airfoil_a2u'], config['airfoil_a2l'],
-        config['motor_kv'], config['battery_cells'], config['battery_energy']
+        result['wing_area'], result['mach_start']
     ]
-
-    # 6 output values: 2 lap counts + 4 rewards
-    outputs = [
-        result['lap_count_m2'], result['lap_count_m3'],
-        result['reward_m1'], result['reward_m2'],
-        result['reward_m3'], result['reward_gm']
-    ]
-
-    # Status: 1 for feasible, 0 for failed
-    status = 1 if result['feasible'] else 0
-
-    # Build CSV row
-    csv_row = [run_num, total_runs] + params + outputs + [status]
 
     # Print with consistent precision
-    print(','.join(str(v) if isinstance(v, int) else f'{v:.6g}' for v in csv_row))
+    cl_vals = np.linspace(0,result['max_cl'],10)
+    for cl in cl_vals:
+        csv_row = params + [cl] + [result['aero'](cl)] + [cl/result['aero'](cl)]
+        print(','.join(str(v) if isinstance(v, int) else f'{v:.6g}' for v in csv_row))
 
 
 # ============================================================================
@@ -254,18 +190,18 @@ def evaluate_configuration(config: dict) -> dict:
     """
     try:
         # 1. Calculate derived parameters
-        total_weight = calculate_total_weight(config['wing_area'])
+        total_weight = calculate_total_weight(1)
 
         # Context manager for suppressing output
         context = suppress_output()
 
         with context:
             # 2. Create OpenVSP geometry
-            create_base_Mach1UAV.main(config['wing_area'])
-
+            create_base_Mach1UAV.main(config)
+            
             # 3. Run aerodynamic analysis
             aero_results = variable_plane_analysis.main(config)
-            aero_results = clean_aero_results(aero_results)
+            max_cl = max(aero_results['CL'])
 
             # 4. Calculate parasitic drag
             parasitic_drag = variable_plane_parasitic.main(config)
@@ -279,14 +215,13 @@ def evaluate_configuration(config: dict) -> dict:
         return {
             **config,  # All input parameters
             'aero': lift_drag_mapper,
-            'weight': total_weight
+            'weight': total_weight,
+            'max_cl': max_cl
         }
 
     except Exception as e:
         # On failure, return config with zero flight rewards but preserve gm score
-        return {
-            **config
-        }
+        raise
 
 
 # ============================================================================
@@ -297,12 +232,14 @@ if __name__ == '__main__':
     
     # Test with single manual configuration
     print("="*60)
-    print("RUNNING TEST CONFIGURATION WITH DETAILED DEBUGGING")
+    print("CONFIGURATIONS")
     print("="*60)
 
     # Making plane in VSP
-    planform_sweep = [1,2,3,4,5,6,7,8,9,10]
-    mach_sweep = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2]
+    # planform_sweep = [1,2,3,4,5,6,7,8,9,10]
+    # mach_sweep = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2]
+    planform_sweep = [10]
+    mach_sweep = [0.1]
     alpha_start = -5
     alpha_end = 20
     alpha_points = 26
@@ -330,11 +267,27 @@ if __name__ == '__main__':
             outboard_span = np.sqrt(AR_OUTBOARD*AREA_OUTBOARD)
             body_length = 1.55 * root_chord
             x_wing = 0.22222 * body_length
+            body_diameter = 0.1 * body_length
 
             config = {}
+            config['ar_inboard'] = AR_INBOARD
+            config['area_inboard'] = AREA_INBOARD
+            config['taper_inboard'] = TAPER_INBOARD
+            config['te_sweep_inboard'] = TE_SWEEP_INBOARD
+            config['ar_outboard'] = AR_OUTBOARD
+            config['area_outboard'] = AREA_OUTBOARD
+            config['taper_outboard'] = TAPER_OUTBOARD
+            config['te_sweep_outboard'] = TE_SWEEP_OUTBOARD
+            config['inboard_span'] = inboard_span
+            config['outboard_span'] = outboard_span
+            config['root_chord'] = root_chord
+            config['middle_chord'] = middle_chord
+            config['tip_chord'] = tip_chord
             config['wing_area'] =  planform_area
             config['taper_ratio'] = tip_chord / root_chord
             config['wing_span'] = inboard_span + outboard_span
+            config['body_length'] = body_length
+            config['diameter'] = body_diameter
             mac_result = MAC([root_chord, middle_chord, tip_chord], [inboard_span, outboard_span],
                             [TE_SWEEP_INBOARD, TE_SWEEP_OUTBOARD])
             config['MAC'] = mac_result['mac']
@@ -349,6 +302,7 @@ if __name__ == '__main__':
             config['alpha_points'] = alpha_points
             config['x_rel'] = x_wing + mac_result['quarter_mac_le_distance']
             config['v_ref'] = mach * 1116
+            config['x_wing'] = x_wing
 
             config['thickness'] = 0.04
             te_sweep = 20 # Degrees at trailing edge
@@ -362,4 +316,5 @@ if __name__ == '__main__':
 
             result = evaluate_configuration(config)
 
+            print_compact_csv(result)
 

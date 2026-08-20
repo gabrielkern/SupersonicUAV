@@ -106,7 +106,7 @@ def setup_vspaero_inputs(vsp_aero_data: Dict):
     vsp.SetIntAnalysisInput(vsp_aero_data['vsp_analysis'], "BetaNpts", [vsp_aero_data['beta_points']], 0)
 
     # Set wake and symmetry parameters
-    vsp.SetIntAnalysisInput(vsp_aero_data['vsp_analysis'], "FixedWakeFlag", [1], 0)
+    vsp.SetIntAnalysisInput(vsp_aero_data['vsp_analysis'], "FixedWakeFlag", [0], 0)
     vsp.SetIntAnalysisInput(vsp_aero_data['vsp_analysis'], "WakeNumIter", [vsp_aero_data['wake_iter']], 0)  # Wake iterations
     vsp.SetIntAnalysisInput(vsp_aero_data['vsp_analysis'], "NumWakeNodes", [vsp_aero_data['wake_nodes']], 0)  # Wake nodes
     vsp.SetDoubleAnalysisInput(vsp_aero_data['vsp_analysis'], "WakeRelax", [vsp_aero_data['wake_relax']], 0)

@@ -1,0 +1,20 @@
+PARASITE DRAG BUILD UP DATA 
+
+Mach, Altitude (ft), Vinf (Mach), S_ref (ft^2)
+0.100000, 0.000000, 0.100000, 10.000000 
+
+Temp (F), Pressure (lbf/ft^2), Density (slug/ft^3) 
+59.000000, 2116.216195, 0.002377 
+
+Lam Cf Eqn, Turb Cf Eqn 
+Laminar Blasius, Spalding-Chi Explicit Empirical Fit 
+
+Component Name,S_wet (ft^2),L_ref (ft),t/c or d/l,FF,FF Eqn Type,Re,% Lam,Cf,Q (Interference Factor),f (ft^2),Cd,% Total 
+Main_Wing,14.543687, 2.993902, 0.039876,1.060602, Schemensky 6 Series AF,2125869.839797, 0.000000,0.003822, 1.000000,0.058957, 0.005896, 57.739131 
+Fuselage,11.296076, 7.114329, 10.129864,1.053259, Hoerner Streamlined Body,5051646.938973, 0.000000,0.003297, 1.100000,0.043152, 0.004315, 42.260869 
+
+Excrescences, Type, Input
+
+ , , , , , , , , , Geometry Sub-Total:, 0.102109, 0.010211, 100.000000 
+ , , , , , , , , , Excrescence Sub-Total:, 0.000000, 0.000000, 0.000000 
+ , , , , , , , , , Totals:, 0.102109, 0.010211, 100.000000 

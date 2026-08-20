@@ -98,21 +98,19 @@ def check_errors(error_mgr):
         return True
     return False
 
-def main(verbose: bool = False):
+def main(config):
     """Run complete Parasitic Drag analysis."""
     # Suppress all output by default
     old_stdout = sys.stdout
     old_stderr = sys.stderr
-    if not verbose:
-        sys.stdout = open(os.devnull, 'w')
-        sys.stderr = open(os.devnull, 'w')
+    sys.stdout = open(os.devnull, 'w')
+    sys.stderr = open(os.devnull, 'w')
 
     try:
         # Initialize and load geometry
         error_mgr = initialize_vsp()
-
         # Run massprop analysis
-        total_drag = run_parasitic_analysis()
+        total_drag = run_parasitic_analysis(config)
 
         # Check for errors
         if check_errors(error_mgr):
@@ -124,13 +122,13 @@ def main(verbose: bool = False):
         return None
     finally:
         # Restore stdout/stderr
-        if not verbose:
-            sys.stdout.close()
-            sys.stderr.close()
+        sys.stdout.close()
+        sys.stderr.close()
         sys.stdout = old_stdout
         sys.stderr = old_stderr
 
 
 if __name__ == "__main__":
-    return_val = main(verbose=True)
+    config = {'wing_area':1,'mach_start':0.7}
+    return_val = main(config)
     print(return_val)
