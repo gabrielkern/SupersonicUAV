@@ -306,8 +306,8 @@ def main(config):
 
     # For single point analysis:
     alpha_start = config['alpha_start']     # Angle of attack [deg]
-    alpha_points = config['alpha_end']      # Number of alpha points
-    alpha_end = config['alpha_points']      # End angle of attack [deg]
+    alpha_points = config['alpha_points']      # Number of alpha points
+    alpha_end = config['alpha_end']      # End angle of attack [deg]
 
     # Beta parms
 

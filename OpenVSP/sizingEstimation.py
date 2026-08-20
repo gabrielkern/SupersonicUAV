@@ -1,7 +1,10 @@
 import sys
 import os
+import csv
 from contextlib import contextmanager
+from collections import defaultdict
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from scipy.stats import qmc
 
@@ -174,6 +177,98 @@ def print_compact_csv(result: dict):
         print(','.join(str(v) if isinstance(v, int) else f'{v:.6g}' for v in csv_row))
 
 
+def write_results_csv(all_results: list, filepath: str):
+    """Write per-alpha aerodynamic coefficients for every evaluated
+    configuration to a CSV file. One row per (planform area, mach, alpha)
+    point; all lift/drag values are dimensionless coefficients."""
+    with open(filepath, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            'mach', 'planform_area', 'angle_of_attack', 'lift',
+            'induced_drag', 'parasitic_drag', 'wave_drag', 'total_drag',
+            'lift_over_drag'
+        ])
+        for result in all_results:
+            mach = result['mach_start']
+            planform_area = result['wing_area']
+            for i in range(len(result['alpha'])):
+                writer.writerow([
+                    mach, planform_area, result['alpha'][i], result['CL'][i],
+                    result['CD_induced'][i], result['CD_parasitic'],
+                    result['CD_wave'][i], result['CD_total'][i],
+                    result['L_over_D'][i]
+                ])
+
+
+def plot_sweep_results(all_results: list, show: bool = True, save_path: str = None):
+    """Windowed 2x2 subplot summarizing the planform/mach sweep:
+      1. Lift vs drag (CL vs CD_total) - one line per (planform, mach) pair
+      2. Drag vs mach at each combo's best-L/D angle of attack - one line
+         per planform area
+      3. Drag breakdown (induced/parasitic/wave/total) vs angle of attack
+         for the first evaluated (planform, mach) case, as a representative
+         example of how the components combine
+      4. L/D vs mach at each combo's best-L/D angle of attack - one line
+         per planform area
+    """
+    fig, ((ax_lift_drag, ax_drag_mach), (ax_breakdown, ax_ld_mach)) = plt.subplots(2, 2, figsize=(12, 9))
+
+    # 1. Lift vs drag, one line per (planform, mach) pair
+    for result in all_results:
+        label = f"S={result['wing_area']:.3g} ft², M={result['mach_start']:.2g}"
+        ax_lift_drag.plot(result['CD_total'], result['CL'], marker='o', markersize=2, label=label)
+    ax_lift_drag.set_xlabel('Total drag coefficient, $C_D$')
+    ax_lift_drag.set_ylabel('Lift coefficient, $C_L$')
+    ax_lift_drag.set_title('Lift vs Drag')
+    if len(all_results) <= 12:
+        ax_lift_drag.legend(fontsize=7)
+
+    # 2 & 4. Drag and L/D at the best-L/D angle of attack, vs mach,
+    # one line per planform area
+    by_planform = defaultdict(list)
+    for result in all_results:
+        by_planform[result['wing_area']].append(result)
+
+    for planform_area, results in sorted(by_planform.items()):
+        results_sorted = sorted(results, key=lambda r: r['mach_start'])
+        machs = [r['mach_start'] for r in results_sorted]
+        best_idx = [int(np.argmax(r['L_over_D'])) for r in results_sorted]
+        drag_at_best = [r['CD_total'][i] for r, i in zip(results_sorted, best_idx)]
+        ld_at_best = [r['L_over_D'][i] for r, i in zip(results_sorted, best_idx)]
+
+        label = f"S={planform_area:.3g} ft²"
+        ax_drag_mach.plot(machs, drag_at_best, marker='o', label=label)
+        ax_ld_mach.plot(machs, ld_at_best, marker='o', label=label)
+
+    ax_drag_mach.set_xlabel('Mach')
+    ax_drag_mach.set_ylabel('$C_D$ at best L/D')
+    ax_drag_mach.set_title('Drag vs Mach (at best L/D angle of attack)')
+    ax_drag_mach.legend(fontsize=7)
+
+    ax_ld_mach.set_xlabel('Mach')
+    ax_ld_mach.set_ylabel('Max L/D')
+    ax_ld_mach.set_title('L/D vs Mach (at best L/D angle of attack)')
+    ax_ld_mach.legend(fontsize=7)
+
+    # 3. Drag breakdown vs angle of attack, representative case
+    rep = all_results[8]
+    ax_breakdown.plot(rep['alpha'], rep['CD_induced'], label='Induced')
+    ax_breakdown.plot(rep['alpha'], np.full_like(rep['alpha'], rep['CD_parasitic']), label='Parasitic')
+    ax_breakdown.plot(rep['alpha'], rep['CD_wave'], label='Wave')
+    ax_breakdown.plot(rep['alpha'], rep['CD_total'], label='Total', linewidth=2, color='black')
+    ax_breakdown.set_xlabel('Angle of attack (deg)')
+    ax_breakdown.set_ylabel('Drag coefficient, $C_D$')
+    ax_breakdown.set_title(f"Drag Breakdown vs AoA (S={rep['wing_area']:.3g} ft², M={rep['mach_start']:.2g})")
+    ax_breakdown.legend(fontsize=8)
+
+    fig.tight_layout()
+    if save_path:
+        fig.savefig(save_path, dpi=150)
+    if show:
+        plt.show()
+    return fig
+
+
 # ============================================================================
 # MAIN EVALUATION FUNCTION
 # ============================================================================
@@ -211,12 +306,27 @@ def evaluate_configuration(config: dict) -> dict:
         # 5. Build lift-drag mapper
         lift_drag_mapper = create_lift_drag_mapper(aero_results, parasitic_drag, d_wave)
 
+        # 6. Per-alpha coefficient breakdown (all dimensionless), used for
+        # the CSV export and diagnostic plots.
+        cl_arr = np.array(aero_results['CL'])
+        cd_induced = np.array(aero_results['CD'])
+        cd_wave = np.array(d_wave)
+        cd_total = cd_induced + parasitic_drag + cd_wave
+        l_over_d = np.divide(cl_arr, cd_total, out=np.zeros_like(cl_arr), where=cd_total != 0)
+
         # 9. Build result dictionary
         return {
             **config,  # All input parameters
             'aero': lift_drag_mapper,
             'weight': total_weight,
-            'max_cl': max_cl
+            'max_cl': max_cl,
+            'alpha': np.array(aero_results['alpha']),
+            'CL': cl_arr,
+            'CD_induced': cd_induced,
+            'CD_parasitic': parasitic_drag,
+            'CD_wave': cd_wave,
+            'CD_total': cd_total,
+            'L_over_D': l_over_d,
         }
 
     except Exception as e:
@@ -236,15 +346,18 @@ if __name__ == '__main__':
     print("="*60)
 
     # Making plane in VSP
-    # planform_sweep = [1,2,3,4,5,6,7,8,9,10]
-    # mach_sweep = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2]
-    planform_sweep = [10]
-    mach_sweep = [0.1]
+    planform_sweep = [1,2,3,4,5,6,7,8,9,10]
+    mach_sweep = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95,1.05,1.1,1.2]
     alpha_start = -5
     alpha_end = 20
     alpha_points = 26
 
+    # Where the per-alpha sweep results are written (same directory as this script)
+    CSV_OUTPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sizing_sweep_results.csv')
+
     # print(MAC([1.45145,0.80636,.16127],[.23103,.49438],[20,20]))
+
+    all_results = []
 
     for planform_area in planform_sweep:
         for mach in mach_sweep:
@@ -317,4 +430,9 @@ if __name__ == '__main__':
             result = evaluate_configuration(config)
 
             print_compact_csv(result)
+            all_results.append(result)
+
+    write_results_csv(all_results, CSV_OUTPUT_PATH)
+    print(f"\nWrote {sum(len(r['alpha']) for r in all_results)} rows to {CSV_OUTPUT_PATH}")
+    plot_sweep_results(all_results)
 

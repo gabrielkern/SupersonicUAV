@@ -43,8 +43,6 @@ def run_parasitic_analysis(config):
     print("Running Parasitic Drag Analysis")
     print("=" * 60)
 
-    print(vsp.ListAnalysis())  # Load default parameters
-    print(vsp.GetAnalysisInputNames(ANALYSIS_TYPE))
     vsp.PrintAnalysisInputs(ANALYSIS_TYPE)
 
     # Set full payload as set
@@ -103,8 +101,6 @@ def main(config):
     # Suppress all output by default
     old_stdout = sys.stdout
     old_stderr = sys.stderr
-    sys.stdout = open(os.devnull, 'w')
-    sys.stderr = open(os.devnull, 'w')
 
     try:
         # Initialize and load geometry
@@ -122,8 +118,6 @@ def main(config):
         return None
     finally:
         # Restore stdout/stderr
-        sys.stdout.close()
-        sys.stderr.close()
         sys.stdout = old_stdout
         sys.stderr = old_stderr
 
