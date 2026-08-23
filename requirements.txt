@@ -1,0 +1,6 @@
+numpy
+pyatmos
+scipy
+matplotlib
+ambiance
+huracan

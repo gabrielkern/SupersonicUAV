@@ -6,12 +6,12 @@ from collections import defaultdict
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
-from scipy.stats import qmc
-
-print(os.getcwd())
 
 import create_base_Mach1UAV, variable_plane_analysis, variable_plane_parasitic, wave_drag
 
+# Make subfolder for all the OpenVSP slop
+curdir = os.getcwd()
+os.chdir(curdir + os.sep + 'Mach1Sizing')
 
 @contextmanager
 def suppress_output():
@@ -150,11 +150,9 @@ def MAC(chords, spans, sweeps):
 # HELPER FUNCTIONS
 # ============================================================================
 
-def calculate_total_weight(cargo_units: int) -> float:
-    """Calculate total aircraft empty weight based on cargo capacity."""
-
-    return 3.87 + (0.105 * cargo_units) + (0.0231 * (cargo_units ** 2)) + \
-           (1.74E-03 * (cargo_units ** 3))
+def calculate_total_weight(planform_area: float) -> float:
+    """Estimate weight in lbs based on wing area in ft^2"""
+    return 6.18*planform_area
 
 def create_lift_drag_mapper(aero_results: dict, parasitic_drag: float, wave_drag: float):
     """Create CL -> total CD interpolation function."""
@@ -203,8 +201,7 @@ def write_results_csv(all_results: list, filepath: str):
 def plot_sweep_results(all_results: list, show: bool = True, save_path: str = None):
     """Windowed 2x2 subplot summarizing the planform/mach sweep:
       1. Lift vs drag (CL vs CD_total) - one line per (planform, mach) pair
-      2. Drag vs mach at each combo's best-L/D angle of attack - one line
-         per planform area
+      2. Drag vs mach at alpha = 0 deg - one line per planform area
       3. Drag breakdown (induced/parasitic/wave/total) vs angle of attack
          for the first evaluated (planform, mach) case, as a representative
          example of how the components combine
@@ -223,8 +220,9 @@ def plot_sweep_results(all_results: list, show: bool = True, save_path: str = No
     if len(all_results) <= 12:
         ax_lift_drag.legend(fontsize=7)
 
-    # 2 & 4. Drag and L/D at the best-L/D angle of attack, vs mach,
-    # one line per planform area
+    # 2. Drag at alpha = 0 deg, vs mach, one line per planform area
+    # 4. L/D at the best-L/D angle of attack, vs mach, one line per
+    #    planform area
     by_planform = defaultdict(list)
     for result in all_results:
         by_planform[result['wing_area']].append(result)
@@ -232,17 +230,18 @@ def plot_sweep_results(all_results: list, show: bool = True, save_path: str = No
     for planform_area, results in sorted(by_planform.items()):
         results_sorted = sorted(results, key=lambda r: r['mach_start'])
         machs = [r['mach_start'] for r in results_sorted]
+        zero_idx = [int(np.argmin(np.abs(r['alpha']))) for r in results_sorted]
+        drag_at_zero = [r['CD_total'][i] for r, i in zip(results_sorted, zero_idx)]
         best_idx = [int(np.argmax(r['L_over_D'])) for r in results_sorted]
-        drag_at_best = [r['CD_total'][i] for r, i in zip(results_sorted, best_idx)]
         ld_at_best = [r['L_over_D'][i] for r, i in zip(results_sorted, best_idx)]
 
         label = f"S={planform_area:.3g} ft²"
-        ax_drag_mach.plot(machs, drag_at_best, marker='o', label=label)
+        ax_drag_mach.plot(machs, drag_at_zero, marker='o', label=label)
         ax_ld_mach.plot(machs, ld_at_best, marker='o', label=label)
 
     ax_drag_mach.set_xlabel('Mach')
-    ax_drag_mach.set_ylabel('$C_D$ at best L/D')
-    ax_drag_mach.set_title('Drag vs Mach (at best L/D angle of attack)')
+    ax_drag_mach.set_ylabel('$C_D$ at $\\alpha=0°$')
+    ax_drag_mach.set_title('Drag vs Mach (at 0° angle of attack)')
     ax_drag_mach.legend(fontsize=7)
 
     ax_ld_mach.set_xlabel('Mach')
@@ -346,11 +345,18 @@ if __name__ == '__main__':
     print("="*60)
 
     # Making plane in VSP
-    planform_sweep = [1,2,3,4,5,6,7,8,9,10]
-    mach_sweep = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95,1.05,1.1,1.2]
-    alpha_start = -5
-    alpha_end = 20
-    alpha_points = 26
+    # planform_sweep = [1,2,3,4,5,6,7,8,9,10]
+    # mach_sweep = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95,1.05,1.1,1.2]
+    # alpha_start = -5
+    # alpha_end = 20
+    # alpha_points = 26
+
+    # For testing
+    planform_sweep = [1]
+    mach_sweep = [0.1]
+    alpha_start = 0
+    alpha_end = 0
+    alpha_points = 1
 
     # Where the per-alpha sweep results are written (same directory as this script)
     CSV_OUTPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sizing_sweep_results.csv')
