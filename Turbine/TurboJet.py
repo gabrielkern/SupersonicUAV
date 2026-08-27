@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 ############################################################################
 
 ##########################################
-##############  INPUTS   #################
+##############  INPUTS   ################# T0 is stag or total temp
 ##########################################
 
 vel = [700] # ft/s
@@ -13,7 +13,12 @@ h = [10000] # ft
 
 #inlet
 M_2 = 0.5 # mach at compressor front
-n = 0.98 # recovery factor
+nr = 0.98 # recovery factor
+
+#comperessor
+PR = 3 # p3_ideal/p2
+nc = 0.87 # isentropic efficiency
+M_3 = 0.2 # mach in combustion
 
 #############################################################################
 
@@ -95,19 +100,37 @@ def altitude_corrections(vel,h):
 
     return T_stag, P_stag, P_stat, T_stat
 
-def inlet(M_2,n,h,vel):
+def inlet(M_2,nr,h,vel):
 
   GAM = 1.4
   R = 1716
   T1_stag,P1_stag, P1_stat,T1_stat = altitude_corrections(vel,h)
   T2_stag = T1_stag
-  P2_stag = n*P1_stag
+  P2_stag = nr*P1_stag
   T2_stat = T2_stag / (1+ (GAM-1)/2*M_2**2)
   P2_stat = P2_stag / (1+ (GAM-1)/2*M_2**2)**(GAM/(GAM-1))
   rho2_stat = P2_stat / (R*T2_stat)
+  V2 =  (GAM*R*T2_stat)**0.5 * M_2
 
-  return T2_stat,P2_stat,rho2_stat,P1_stat,T1_stat
+  return T1_stag,T1_stat,P1_stag,P1_stat,T2_stag,T2_stat,P2_stag,P2_stat,V2,rho2_stat
 
-T2_stat,P2_stat,rho2_stat,P1_stat,T1_stat = inlet(M_2,n,h,vel)
+def compressor(T2_0,P2_0,PR,nc,M_3):
+    GAM = 1.4
+    R = 1716
+    cp = 6006
+    T3_0_ideal = T2_0*PR**((GAM-1)/GAM)
+    T3_0 = T2_0 + (T3_0_ideal-T2_0)/nc
+    P3_0 = P2_0*PR
+    T3 = T3_0 / (1+ (GAM-1)/2*M_3**2)
+    P3 = P3_0 / (1+ (GAM-1)/2*M_3**2)**(GAM/(GAM-1))
+    V3 = (GAM*R*T3)**0.5 * M_3
+    rho3_stat = P3 / (R*T3)
+    work_comp = cp*(T3_0-T2_0)
+
+    return T3_0,T3,P3_0,P3,V3,rho3_stat,work_comp
+
+
+T1_stag,T1_stat,P1_stag,P1_stat,T2_stag,T2_stat,P2_stag,P2_stat,V2,rho2_stat= inlet(M_2,nr,h,vel)
 print(T2_stat,P2_stat,rho2_stat,P1_stat,T1_stat)
-
+T3_0,T3,P3_0,P3,V3,rho3_stat,work_comp= compressor(T2_stag,P2_stag,PR,nc,M_3)
+print( T3_0,T3,P3_0,P3,V3,rho3_stat,work_comp)
