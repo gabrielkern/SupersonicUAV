@@ -63,9 +63,9 @@ def create_wing(config):
     vsp.SetParmVal(wing_id, "Root_Chord", "XSec_1", config['root_chord'])
     vsp.SetParmVal(wing_id, "Tip_Chord", "XSec_1", config['middle_chord'])
     vsp.SetParmVal(wing_id, "Span", "XSec_1", config['inboard_span'])
-    vsp.SetParmVal(wing_id, "Sweep", "XSec_1", config['te_sweep_inboard'])
+    vsp.SetParmVal(wing_id, "Sweep", "XSec_1", config['le_sweep'])
     vsp.SetParmVal(wing_id, "Sec_Sweep_Location", "XSec_1", 0.5)
-    vsp.SetParmVal(wing_id, "Sweep_Location", "XSec_1", 1.0)
+    vsp.SetParmVal(wing_id, "Sweep_Location", "XSec_1", 0.0)
     vsp.SetParmVal(wing_id, "SectTess_U", "XSec_1", 6)
     vsp.SetParmVal(wing_id, "InCluster", "XSec_1", 1.0)
     vsp.SetParmVal(wing_id, "OutCluster", "XSec_1", 1.0)
@@ -74,9 +74,9 @@ def create_wing(config):
     vsp.SetParmVal(wing_id, "Root_Chord", "XSec_2", config['middle_chord'])
     vsp.SetParmVal(wing_id, "Tip_Chord", "XSec_2", config['tip_chord'])
     vsp.SetParmVal(wing_id, "Span", "XSec_2", config['outboard_span'])
-    vsp.SetParmVal(wing_id, "Sweep", "XSec_2", config['te_sweep_outboard'])
+    vsp.SetParmVal(wing_id, "Sweep", "XSec_2", config['le_sweep'])
     vsp.SetParmVal(wing_id, "Sec_Sweep_Location", "XSec_2", 0.5)
-    vsp.SetParmVal(wing_id, "Sweep_Location", "XSec_2", 1.0)
+    vsp.SetParmVal(wing_id, "Sweep_Location", "XSec_2", 0.0)
     vsp.SetParmVal(wing_id, "SectTess_U", "XSec_2", 8)
     vsp.SetParmVal(wing_id, "InCluster", "XSec_2", 1.0)
     vsp.SetParmVal(wing_id, "OutCluster", "XSec_2", 1.0)
@@ -219,7 +219,7 @@ def export_model(filename="Mach1_Sizing.vsp3"):
 def main(config):
     """Main function to create the stability test plane."""
     print("=" * 60)
-    print("Stability Test Plane Generator")
+    print("Mach 1 UAV Test Plane Generator")
     print("=" * 60)
 
     # Initialize OpenVSP (suppress output)

@@ -10,15 +10,14 @@ and runs MassProp analysis to compute aerodynamic coefficients and stability der
 import sys
 import os
 
+ANALYSIS_TYPE = "ParasiteDrag"
+
 # Add OpenVSP Python path
 sys.path.append('/Users/gabrielkern/Documents/Python/AgenticDesigner/OpenVSP-3.45.4-MacOS/python/openvsp')
 
 import openvsp as vsp
 
-VSP_FILE = "Mach1_Sizing.vsp3"
-ANALYSIS_TYPE = "ParasiteDrag"
-
-def initialize_vsp():
+def initialize_vsp(filename):
     """Initialize OpenVSP and load the geometry file."""
     print("=" * 60)
     print("Initializing VSPAERO Analysis")
@@ -30,8 +29,8 @@ def initialize_vsp():
     version = vsp.GetVSPVersion()  # Get VSP version string
     print(f"OpenVSP Version: {version}")
 
-    print(f"\nLoading file: {VSP_FILE}")
-    vsp.ReadVSPFile(VSP_FILE)  # Load .vsp3 geometry file
+    print(f"\nLoading file: {filename}")
+    vsp.ReadVSPFile(filename)  # Load .vsp3 geometry file
     vsp.Update()  # Update all geometry
     print("File loaded successfully")
 
@@ -66,8 +65,8 @@ def run_parasitic_analysis(config):
     # mach
     vsp.SetIntAnalysisInput(ANALYSIS_TYPE, "VelocityUnit", [6], 0)
 
-    # 0 ft of altitude
-    vsp.SetDoubleAnalysisInput(ANALYSIS_TYPE, "Altitude", [0], 0)
+    # Altitude [ft]
+    vsp.SetDoubleAnalysisInput(ANALYSIS_TYPE, "Altitude", [config['altitude']], 0)
     vsp.SetIntAnalysisInput(ANALYSIS_TYPE, "AltLengthUnit", [0], 0)
 
     print("\nParasitic Drag Analysis Inputs:")
@@ -96,15 +95,20 @@ def check_errors(error_mgr):
         return True
     return False
 
-def main(config):
+def main(config, filename=None):
     """Run complete Parasitic Drag analysis."""
     # Suppress all output by default
     old_stdout = sys.stdout
     old_stderr = sys.stderr
 
+    if filename == None:
+        filename = "Mach1_Sizing.vsp3"
+    else:
+        filename = filename
+
     try:
         # Initialize and load geometry
-        error_mgr = initialize_vsp()
+        error_mgr = initialize_vsp(filename)
         # Run massprop analysis
         total_drag = run_parasitic_analysis(config)
 
@@ -123,6 +127,7 @@ def main(config):
 
 
 if __name__ == "__main__":
-    config = {'wing_area':1,'mach_start':0.7}
-    return_val = main(config)
+    filename = "Mach1_Sizing.vsp3"
+    config = {'wing_area':1,'mach_start':0.7,'altitude':0}
+    return_val = main(config, filename)
     print(return_val)

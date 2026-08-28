@@ -13,11 +13,17 @@ import numpy as np
 from typing import Dict
 from scipy.interpolate import interp1d
 from pathlib import Path
+from ambiance import Atmosphere
+
+from TopSpeedSim import get_atmosphere, GAMMA, R
 
 # Add OpenVSP Python path
 sys.path.append('/Users/gabrielkern/Documents/Python/AgenticDesigner/OpenVSP-3.45.4-MacOS/python/openvsp')
 
 import openvsp as vsp
+
+# Pa*s -> slug/(ft*s) (equivalently lbf*s/ft^2)
+PASCAL_SECOND_TO_SLUG_PER_FT_S = 0.0208854342
 
 # ==============================================================================
 # MAIN ANALYSIS FUNCTIONS
@@ -257,7 +263,7 @@ def check_errors(error_mgr):
 # MAIN EXECUTION
 # ==============================================================================
 
-def main(config):
+def main(config, filename=None):
     """
     Run complete VSPAERO analysis to get base aero data
     """
@@ -269,7 +275,8 @@ def main(config):
     vsp_aero_data = {}
 
     # Config
-    filename = "Mach1_Sizing.vsp3"
+    if filename == None:
+        filename = "Mach1_Sizing.vsp3"
     vsp_analysis = "VSPAEROSweep"
     geom_analysis = "VSPAEROComputeGeometry"
 
@@ -290,12 +297,19 @@ def main(config):
     mach_end = config['mach_end']
     mach_points = config['mach_points']
 
-    # Air density [slugs/ft³] and speed of sound [ft/s]
-    # Standard sea level: ~0.002377 slugs/ft³
-    # Also 1116.5 ft/s for speed of sound
-    rho = 0.002378
-    sos = 1116.5
-    mu = 3.737e-7
+    # Air density [slugs/ft³] and temperature [R] from the standard atmosphere
+    # at the analysis altitude
+    altitude = config['altitude']
+    rho, temp = get_atmosphere(altitude)
+    rho = float(np.ravel(rho)[0])
+    temp = float(np.ravel(temp)[0])
+
+    # Speed of sound [ft/s]
+    sos = np.sqrt(GAMMA * R * temp)
+
+    # Dynamic viscosity [slug/(ft*s)] from the standard atmosphere
+    altitude_meters = altitude * 0.3048
+    mu = float(np.ravel(Atmosphere(altitude_meters).dynamic_viscosity)[0]) * PASCAL_SECOND_TO_SLUG_PER_FT_S
 
     # Reynolds number based on reference chord
     re_start = config['mach_start'] * sos * rho * config['MAC'] / mu
@@ -388,9 +402,9 @@ def main(config):
 
     vsp_aero_data['ref_flag'] = ref_flag
 
-    # Reference values
+    # Reference values (altitude-corrected: v_ref = mach * local speed of sound)
 
-    vsp_aero_data['v_ref'] = config['v_ref']
+    vsp_aero_data['v_ref'] = mach_start * sos
 
 # Outputs
 
