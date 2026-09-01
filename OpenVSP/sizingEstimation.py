@@ -166,6 +166,13 @@ def le_sweep_to_te_sweep(le_sweep_deg: float, root_chord: float, tip_chord: floa
     te_sweep_rad = np.arctan(np.tan(le_sweep_rad) - (root_chord - tip_chord) / span)
     return np.rad2deg(te_sweep_rad)
 
+def le_sweep_to_midchord_sweep(le_sweep_deg: float, span: float, root_chord: float, tip_chord: float):
+    """Convert's the wing's leading edge sweep to midchord sweep."""
+    le_sweep_rad = np.deg2rad(le_sweep_deg)
+    root_tip_le_x_diff = span * np.tan(le_sweep_rad)
+    midchord_sweep = np.arctan( (root_tip_le_x_diff + (tip_chord/2) - (root_chord/2) ) / span)
+    return midchord_sweep
+
 def le_sweep_to_quarter_chord_sweep(le_sweep_deg: float, span: float, root_chord: float, tip_chord: float):
     """Converts the wing's leading edge sweep to an approximate quarter-chord sweep."""
     le_sweep_rad = np.deg2rad(le_sweep_deg)
@@ -273,7 +280,7 @@ def write_results_csv(all_results: list, filepath: str):
     TopSpeedSim.py's CSV loader keeps working unchanged); 'le_sweep' and
     'altitude' are appended as trailing columns for the new sweep study.
     """
-    if not os.path.isfile(filepath):
+    if not os.path.isdir(os.path.dirname(filepath)):
         os.mkdir(os.path.dirname(filepath))
     with open(filepath, 'w', newline='') as f:
         writer = csv.writer(f)

@@ -11,6 +11,7 @@ import argparse
 import numpy as np
 from typing import Dict
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
 from ambiance import Atmosphere
 from scipy.interpolate import interp1d
 
@@ -19,14 +20,7 @@ import sizingEstimation
 # Constants
 GAMMA = 1.4
 R = 1716 # ft*lbf/slug/R or s2/ft2/R
-
-# Static parameters
-LAP_ALTITUDE = 200  # ft
-CLIMB_ANGLE = 20  # deg
-GRAVITY = 32.174  # ft/s^2
-RHO = 0.0023769  # slugs/ft^3 at sea level
-DT = 0.05  # seconds
-PROPULSIVE_EFFICIENCY = 0.75
+g = 32.174
 
 class LowThrustException(Exception):
     pass
@@ -52,6 +46,13 @@ def sfc_model(constant_sfc):
     def sfc_interp(altitude, mach):
         return constant_sfc
     return sfc_interp
+
+def update_fuel_mass(curr_fuel_mass, sfc, dt, thrust):
+    """Calculates the fuel lost in lbm."""
+    dt_hours = dt / 3600 # Convert to hours
+    mass_used = sfc * dt_hours * thrust # Mass in lbm
+    new_fuel_mass = curr_fuel_mass - mass_used if mass_used > 0 else curr_fuel_mass
+    return new_fuel_mass
 
 @lru_cache(maxsize=None)
 def _load_lift_drag_csv(csv_path):
@@ -85,17 +86,26 @@ def build_lift_drag_interp(csv_path, wing_area):
     """
     mach_grid, area_grid, aoa_grid, lift_3d, drag_3d = _load_lift_drag_csv(csv_path)
 
-    area_interp_lift = interp1d(area_grid, lift_3d, axis=1, bounds_error=False, fill_value="extrapolate")
-    area_interp_drag = interp1d(area_grid, drag_3d, axis=1, bounds_error=False, fill_value="extrapolate")
-    lift_2d = area_interp_lift(wing_area)  # shape: (len(mach_grid), len(aoa_grid))
-    drag_2d = area_interp_drag(wing_area)
+    if len(area_grid) < 2:
+        lift_2d = lift_3d[:, 0, :]  # single area in sweep — squeeze out area axis
+        drag_2d = drag_3d[:, 0, :]
+    else:
+        area_interp_lift = interp1d(area_grid, lift_3d, axis=1, bounds_error=False, fill_value="extrapolate")
+        area_interp_drag = interp1d(area_grid, drag_3d, axis=1, bounds_error=False, fill_value="extrapolate")
+        lift_2d = area_interp_lift(wing_area)  # shape: (len(mach_grid), len(aoa_grid))
+        drag_2d = area_interp_drag(wing_area)
 
     per_mach_interps = []
-    for cl_row, cd_row in zip(lift_2d, drag_2d):
+    cl_min_per_mach = np.empty(len(lift_2d))
+    cl_max_per_mach = np.empty_like(cl_min_per_mach)
+    for k, (cl_row, cd_row) in enumerate(zip(lift_2d, drag_2d)):
         order = np.argsort(cl_row)
+        cl_sorted = cl_row[order]
         per_mach_interps.append(
-            interp1d(cl_row[order], cd_row[order], bounds_error=False, fill_value="extrapolate")
+            interp1d(cl_sorted, cd_row[order], bounds_error=False, fill_value="extrapolate")
         )
+        cl_min_per_mach[k] = cl_sorted[0]
+        cl_max_per_mach[k] = cl_sorted[-1]
 
     def drag_lookup(mach, cl):
         # mach/cl may arrive as length-1 arrays (ambiance's Atmosphere always
@@ -103,20 +113,43 @@ def build_lift_drag_interp(csv_path, wing_area):
         mach = float(np.ravel(mach)[0])
         cl = float(np.ravel(cl)[0])
 
-        # Check bounds for violation of mach
-        if mach <= mach_grid[0]:
-            return float(per_mach_interps[0](cl))
-        if mach >= mach_grid[-1]:
-            return float(per_mach_interps[-1](cl))
-        
-        # Get python index of location of machs in grid
-        i = int(np.searchsorted(mach_grid, mach) - 1)
-        m0, m1 = mach_grid[i], mach_grid[i + 1]
+        # Determine mach out-of-range flags and bracketing station indices
+        mach_low  = mach < mach_grid[0]
+        mach_high = mach > mach_grid[-1]
 
-        # Linear interpolation
-        t = (mach - m0) / (m1 - m0)
-        cd0 = per_mach_interps[i](cl)
-        cd1 = per_mach_interps[i + 1](cl)
+        if mach_low:
+            station_indices = [0, 1]
+        elif mach_high:
+            station_indices = [-2, -1]
+        else:
+            i = int(np.searchsorted(mach_grid, mach) - 1)
+            i = max(0, min(i, len(mach_grid) - 2))  # guard against fp edge cases at boundary
+            station_indices = [i, i + 1]
+
+        # Detect CL out-of-range against the relevant mach stations
+        cl_low  = cl < cl_min_per_mach[station_indices].min()
+        cl_high = cl > cl_max_per_mach[station_indices].max()
+
+        if mach_low or mach_high or cl_low or cl_high:
+            print(f"[WARNING] Extrapolation required with mach {mach} and CL {cl}")
+
+        # Compute CD
+        if mach_low:
+            cd0   = float(per_mach_interps[0](cl))
+            cd1   = float(per_mach_interps[1](cl))
+            slope = (cd1 - cd0) / (mach_grid[1] - mach_grid[0])
+            return cd0 + slope * (mach - mach_grid[0])
+
+        if mach_high:
+            cd_n   = float(per_mach_interps[-1](cl))
+            cd_nm1 = float(per_mach_interps[-2](cl))
+            slope  = (cd_n - cd_nm1) / (mach_grid[-1] - mach_grid[-2])
+            return cd_n + slope * (mach - mach_grid[-1])
+
+        # Interior: linear interpolation between bracketing stations
+        t   = (mach - mach_grid[i]) / (mach_grid[i + 1] - mach_grid[i])
+        cd0 = float(per_mach_interps[i](cl))
+        cd1 = float(per_mach_interps[i + 1](cl))
         return float((1 - t) * cd0 + t * cd1)
 
     return drag_lookup
@@ -185,103 +218,119 @@ def climb(state: dict, config: dict):
     cruise_alt = config['cruise_altitude']
     theta = np.radians(config['theta'])
     CL_stall = config['CL_stall']
-    lift_drag_mapper = config['drag_lookup']
+    drag_lookup = config['drag_lookup']
+    thrust_interp = config['thrust_interp']
+    sfc_interp = config['sfc_interp']
 
     i = state['i']
 
-    ## TODO: Get the loop initialized and the fuel burn function written
+    while (state['position'][i, 1] <= cruise_alt) and (state['fuel'][i] >= config['landing_fuel_frac']*config['fuel_capacity']):
 
-    while state['position'][i, 1] <= cruise_alt and state['time'][-1] < 300:
-        v = state['velocity'][i] if state['velocity'][i] <= constants['velocity_max'] else constants['velocity_max']
+        # Define altitude-dependent variables
+        altitude = state['position'][i,1]
+        rho, T = get_atmosphere(altitude)
+        sos = np.sqrt(GAMMA * R * T)
 
-        if v < constants['stall_speed']:
-            raise LowThrustException
+        # Fuel dependent weight and mass
+        W = EW + state['fuel'][i]
+        m = W / g
+
+        v = state['velocity'][i] # if state['velocity'][i] <= constants['velocity_max'] else constants['velocity_max']
+        mach = v / sos
+
+        # if v < constants['stall_speed']:
+        #     raise LowThrustException
 
         q = 0.5 * rho * v**2
 
         CL_Climb = (W * np.cos(theta)) / (q * S)
         if CL_Climb > CL_stall:
             CL_Climb = CL_stall
-        CD_i_p = lift_drag_mapper(CL_Climb)
 
-        drag = CD_i_p * q * S
-        CD_Climb = drag / (q * S)
+        CD_Climb = drag_lookup(np.atleast_1d(mach),np.atleast_1d(CL_Climb))
 
-        thrust, current = apc_data.get_propeller_performance(
-            diameter=diameter,
-            pitch=pitch,
-            motor_kv=kv,
-            battery_cell_count=battery_cell_count,
-            airspeed_mph=v / 1.46667
-        )
+        drag = CD_Climb * q * S
+
+        # Get thrust from interpolation model
+        thrust = thrust_interp(altitude, mach)
+
+        # Get fuel consumption from thrust
+        sfc = sfc_interp(altitude, mach)
 
         new_acceleration = ((thrust) - (drag) - (W * np.sin(theta))) / m
         new_velocity = v + new_acceleration * dt
-        new_position = np.add(state['position'][i], [v * dt * np.cos(theta), v * dt * np.sin(theta)])
+        new_position = np.add(state['position'][i], np.transpose([v * dt * np.cos(theta), v * dt * np.sin(theta)]))
 
         state['velocity'] = np.append(state['velocity'], new_velocity)
         state['position'] = np.vstack((state['position'], new_position))
         state['acceleration'] = np.append(state['acceleration'], new_acceleration)
-        state['battery_charge'] = np.append(state['battery_charge'], update_charge(state['battery_charge'][i], current, dt))
+        state['fuel'] = np.append(state['fuel'], update_fuel_mass(state['fuel'][i], sfc, dt, thrust))
         state['time'] = np.append(state['time'], state['time'][i] + dt)
-        state['turn_angle'] = np.append(state['turn_angle'], 0)
         state['thrust'] = np.append(state['thrust'], thrust)
-        state['Cl'] = np.append(state['Cl'], CL_Climb)
-        state['Cd'] = np.append(state['Cd'], CD_Climb)
+        state['CL'] = np.append(state['CL'], CL_Climb)
+        state['CD'] = np.append(state['CD'], CD_Climb)
         state['lift'] = np.append(state['lift'], W * np.cos(theta))
         state['drag'] = np.append(state['drag'], drag)
         state['F_long'] = np.append(state['F_long'], new_acceleration * m)
-        state['F_lat'] = np.append(state['F_lat'], 0)
+        state['temp'] = np.append(state['temp'], T)
+        state['rho'] = np.append(state['rho'], rho)
         i += 1
         state['i'] = i
 
-    print(state['battery_charge'][-1])
+        print(state['CL'][-1])
+        print(state['CD'][-1])
+        print(state['lift'][-1])
+        print(state['drag'][-1])
+        print(state['velocity'][-1])
+        print(state['rho'][-1])
+        print(state['CD'][-1]*0.5*state['rho'][-1]*state['velocity'][-1]**2)
+        input()
 
-
-def straight(state: dict, constants: dict, distance_needed: float, mission: int, debug: bool = False):
+def straight(state: dict, config: dict):
     """
     The function to calculate the straightaways, uses the assumption of constant altitude.
     """
-    W = constants['W']
-    m = constants['m']
-    S = constants['S']
-    rho = constants['rho']
-    dt = constants['dt']
-    CL_stall = constants['CL_stall']
-    diameter = constants['propeller_diameter']
-    pitch = constants['propeller_pitch']
-    kv = constants['motor_kv']
-    battery_cell_count = constants['battery_cells']
-    lift_drag_mapper = constants['lift_drag_mapper']
+    EW = config['structural_weight'] + config['engine_weight']
+    S = config['wing_area']
+    dt = config['dt']
+    CL_stall = config['CL_stall']
+    drag_lookup = config['drag_lookup']
+    thrust_interp = config['thrust_interp']
+    sfc_interp = config['sfc_interp']
 
     i = state['i']
-    distance_traveled = 0
 
-    while (distance_needed >= distance_traveled) and state['time'][-1] < 300:
-        v = state['velocity'][i] if state['velocity'][i] <= constants['velocity_max'] else constants['velocity_max']
+    while state['fuel'][i] >= config['landing_fuel_frac']*config['fuel_capacity']:
+        
+        # Define altitude-dependent variables
+        altitude = state['position'][i,1]
+        rho, T = get_atmosphere(altitude)
+        sos = np.sqrt(GAMMA * R * T)
 
-        if v < constants['stall_speed']:
-            raise LowThrustException
+        # Fuel dependent weight and mass
+        W = EW + state['fuel'][i]
+        m = W / g
+        
+        v = state['velocity'][i] # if state['velocity'][i] <= constants['velocity_max'] else constants['velocity_max']
+        mach = v / sos
+
+        # if v < constants['stall_speed']:
+        #     raise LowThrustException
 
         q = 0.5 * rho * v**2
 
         CL_Straight = W / q / S
         if CL_Straight > CL_stall:
             CL_Straight = CL_stall
-        CD_i_p = lift_drag_mapper(CL_Straight)
+        CD_Straight = drag_lookup(mach, CL_Straight)
 
-        D_i_p = CD_i_p * q * S
-        D_b = get_banner_drag(length=constants['banner_length'], velocity=v) if mission == 3 else 0
-        drag = D_i_p + D_b
-        CD_Straight = drag / (q * S)
+        drag = CD_Straight * q * S
 
-        thrust, current = apc_data.get_propeller_performance(
-            diameter=diameter,
-            pitch=pitch,
-            motor_kv=kv,
-            battery_cell_count=battery_cell_count,
-            airspeed_mph=v / 1.46667
-        )
+        # Get thrust from interpolation model
+        thrust = thrust_interp(altitude, mach)
+
+        # Get fuel consumption from thrust
+        sfc = sfc_interp(altitude, mach)
 
         new_acceleration = ((thrust) - (drag)) / m
         new_velocity = v + new_acceleration * dt
@@ -290,95 +339,18 @@ def straight(state: dict, constants: dict, distance_needed: float, mission: int,
         state['velocity'] = np.append(state['velocity'], new_velocity)
         state['position'] = np.vstack((state['position'], new_position))
         state['acceleration'] = np.append(state['acceleration'], new_acceleration)
-        state['battery_charge'] = np.append(state['battery_charge'], update_charge(state['battery_charge'][i], current, dt))
+        state['fuel'] = np.append(state['fuel'], update_fuel_mass(state['fuel'][i], sfc, dt, thrust))
         state['time'] = np.append(state['time'], state['time'][i] + dt)
-        state['turn_angle'] = np.append(state['turn_angle'], 0)
         state['thrust'] = np.append(state['thrust'], thrust)
-        state['Cl'] = np.append(state['Cl'], CL_Straight)
-        state['Cd'] = np.append(state['Cd'], CD_Straight)
+        state['CL'] = np.append(state['CL'], CL_Straight)
+        state['CD'] = np.append(state['CD'], CD_Straight)
         state['lift'] = np.append(state['lift'], W)
         state['drag'] = np.append(state['drag'], drag)
         state['F_long'] = np.append(state['F_long'], new_acceleration * m)
-        state['F_lat'] = np.append(state['F_lat'], 0)
-        distance_traveled = distance_traveled + (v * dt)
+        state['temp'] = np.append(state['temp'], T)
+        state['rho'] = np.append(state['rho'], rho)
         i += 1
         state['i'] = i
-
-    print(state['battery_charge'][-1])
-
-
-def turn(state: dict, constants: dict, turn_needed: float, mission: int, debug: bool = False):
-    """
-    Calculate through a turn with constant altitude.
-    """
-    W = constants['W']
-    m = constants['m']
-    S = constants['S']
-    rho = constants['rho']
-    dt = constants['dt']
-    CL_Turn = constants['CL_turn']
-    diameter = constants['propeller_diameter']
-    pitch = constants['propeller_pitch']
-    kv = constants['motor_kv']
-    battery_cell_count = constants['battery_cells']
-    lift_drag_mapper = constants['lift_drag_mapper']
-
-    i = state['i']
-    turn_traveled = 0
-
-    while (turn_needed >= turn_traveled) and state['time'][-1] < 300:
-        v = state['velocity'][i] if state['velocity'][i] <= constants['velocity_max'] else constants['velocity_max']
-
-        if v < constants['stall_speed']:
-            raise LowThrustException
-
-        q = 0.5 * rho * v**2
-
-        CD_i_p = lift_drag_mapper(CL_Turn)
-        D_i_p = CD_i_p * q * S
-        D_b = get_banner_drag(length=constants['banner_length'], velocity=v) if mission == 3 else 0
-        drag = D_i_p + D_b
-        CD_Turn = drag / (q * S)
-        lift = CL_Turn * q * S
-
-        if lift > W:
-            F_lat = np.sqrt(lift**2 - W**2)
-            omega = F_lat / (m * v)
-        else:
-            F_lat = 0
-            omega = 0
-
-        thrust, current = apc_data.get_propeller_performance(
-            diameter=diameter,
-            pitch=pitch,
-            motor_kv=kv,
-            battery_cell_count=battery_cell_count,
-            airspeed_mph=v / 1.46667
-        )
-
-        new_acceleration = ((thrust) - (drag)) / m
-        new_velocity = v + new_acceleration * dt
-        new_position = np.add(state['position'][i], [v * dt, 0.0])
-        turn_traveled = turn_traveled + np.degrees(omega * dt)
-
-        state['velocity'] = np.append(state['velocity'], new_velocity)
-        state['position'] = np.vstack((state['position'], new_position))
-        state['acceleration'] = np.append(state['acceleration'], new_acceleration)
-        state['battery_charge'] = np.append(state['battery_charge'], update_charge(state['battery_charge'][i], current, dt))
-        state['time'] = np.append(state['time'], state['time'][i] + dt)
-        state['turn_angle'] = np.append(state['turn_angle'], np.degrees(omega * dt))
-        state['thrust'] = np.append(state['thrust'], thrust)
-        state['Cl'] = np.append(state['Cl'], CL_Turn)
-        state['Cd'] = np.append(state['Cd'], CD_Turn)
-        state['lift'] = np.append(state['lift'], lift)
-        state['drag'] = np.append(state['drag'], drag)
-        state['F_long'] = np.append(state['F_long'], thrust - drag)
-        state['F_lat'] = np.append(state['F_lat'], F_lat)
-        i += 1
-        state['i'] = i
-    
-    print(state['battery_charge'][-1])
-
 
 def execute_lap_sim(constants: Dict):
     """
@@ -416,8 +388,8 @@ def execute_lap_sim(constants: Dict):
             'time': np.array([0.0]),
             'turn_angle': np.array([0.0]),
             'thrust': np.array([0.0]),
-            'Cl': np.array([0.0]),
-            'Cd': np.array([0.0]),
+            'CL': np.array([0.0]),
+            'CD': np.array([0.0]),
             'lift': np.array([0.0]),
             'drag': np.array([0.0]),
             'F_long': np.array([0.0]),
@@ -506,6 +478,70 @@ def generate_max_speed_plot(altitude_range, wing_area_range, thrust, lift_drag_i
         plt.show()
 
         return max_speeds, machs_speeds
+    
+def plot_results(state: dict, config: dict):
+    """Takes the results from simulation and plots values for various states over the flight time."""
+    
+    # Comprehensive plotting of all flight parameters
+    fig = plt.figure(figsize=[15, 8])
+    gs = GridSpec(3, 3, figure=fig, hspace=0.4, wspace=0.3)
+    fig.suptitle(f"Top Speed Lap Simulation Results", fontsize=18)
+
+    # Row 1: Velocities, Battery, Position
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax1.plot(state['time'], state['velocity'], 'b-', linewidth=2, label='Absolute Velocity')
+    ax1.set_xlabel("Time (s)"); ax1.set_ylabel("Velocity (ft/s)")
+    ax1.set_title("Velocity vs Time"); ax1.grid(True); ax1.legend()
+
+    ax2 = fig.add_subplot(gs[0, 1])
+    ax2.plot(state['time'], state['fuel'], 'g-', linewidth=2, label="Fuel remaining")
+    ax2.plot(state['time'], (np.ones_like(state['time']) * config['landing_fuel_frac'] * config['fuel_capacity']), 'g-', linewidth=2, label="Landing fuel minimum")
+    ax2.set_xlabel("Time (s)"); ax2.set_ylabel("Fuel Mass (lbm)")
+    ax2.set_title("Fuel Mass vs Time"); ax2.grid(True)
+
+    ax3 = fig.add_subplot(gs[0, 2])
+    ax3.plot(state['time'], state['position'][:,0], 'b-', linewidth=2, label='Traveled Distance')
+    ax3.plot(state['time'], state['position'][:,1], 'r-', linewidth=2, label='Altitude')
+    ax3.set_xlabel("Time (s)"); ax3.set_ylabel("Position (ft)")
+    ax3.set_title("Position vs Time"); ax3.grid(True); ax3.legend()
+
+    # Row 2: Accelerations, Thrust
+    ax4 = fig.add_subplot(gs[1, 0])
+    ax4.plot(state['time'], state['acceleration'], 'b-', linewidth=2)
+    ax4.set_xlabel("Time (s)"); ax4.set_ylabel("Acceleration (ft/s²)")
+    ax4.set_title("Acceleration vs Time"); ax4.grid(True); ax4.legend()
+
+    ax5 = fig.add_subplot(gs[1, 1])
+    ax5.plot(state['time'], state['thrust'], 'orange', linewidth=2)
+    ax5.set_xlabel("Time (s)"); ax5.set_ylabel("Thrust (lbs)")
+    ax5.set_title("Thrust vs Time"); ax5.grid(True)
+
+    # Row 3: Aerodynamic coefficients with L/D, Combined Forces, Longitudinal/Lateral Forces
+    ax6 = fig.add_subplot(gs[1, 2])
+    ax6.plot(state['CD'], state['CL'], 'c-', linewidth=2, label='Drag Polar')
+    ax6.set_xlabel("Drag Coefficient"); ax6.set_ylabel("Lift Coefficient")
+    ax6.set_title("CL vs CD"); ax6.grid(True); ax6.legend()
+
+    # Calculate L/D ratio, avoiding division by zero
+    ax7 = fig.add_subplot(gs[2, 0])
+    ld_ratio = np.divide(state['CL'], state['CD'], out=np.zeros_like(state['CL']), where=state['CD']!=0)
+    ax7.plot(state['time'], ld_ratio, 'purple', linewidth=2, label='L/D')
+    ax7.set_xlabel("Time (s)"); ax7.set_ylabel("L/D Ratio")
+    ax7.set_title("L/D vs Time"); ax7.grid(True); ax7.legend()
+
+    ax8 = fig.add_subplot(gs[2, 1])
+    ax8.plot(state['time'], state['lift'], 'g-', linewidth=2, label='Lift')
+    ax8.plot(state['time'], state['drag'], 'brown', linewidth=2, label='Drag')
+    ax8.set_xlabel("Time (s)"); ax8.set_ylabel("Force (lbs)")
+    ax8.set_title("Lift and Drag vs Time"); ax8.grid(True); ax8.legend()
+
+    ax9 = fig.add_subplot(gs[2, 2])
+    ax9.plot(state['time'], state['F_long'], 'k-', linewidth=2)
+    ax9.set_xlabel("Time (s)"); ax9.set_ylabel("Force (lbs)")
+    ax9.set_title("Longitudinal Force vs Time"); ax9.grid(True); ax9.legend()
+
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
 
@@ -526,18 +562,18 @@ if __name__ == "__main__":
     else:
         print("Running the full top speed simulator.")
 
-        CONFIG_NAME = "Test_Vehicle"
+        CONFIG_NAME = "Full_Sweep_Test"
 
         print(f"Vehicle identifier: {CONFIG_NAME}")
 
-        altitude_range = (0,10000,1) # ft
-        mach_range = (0.01,0.99,11)
+        altitude_range = (0,30000,31) # ft
+        mach_range = (0.01,0.99,10)
         alpha_range = (-5,20,26)
         constant_thrust = 50 # lbs
         climb_angle = 15 # deg
         cruise_altitude = 1000
         wing_area = 1 # ft^2
-        max_cl = 0.75 # based on airfoil
+        max_cl = 0.70 # based on airfoil
         wing_thickness = 0.04
         root_chord = 1.4
         tip_chord = 0.1
@@ -577,16 +613,26 @@ if __name__ == "__main__":
 
         lift_drag_csv = os.path.join(os.path.dirname(__file__), "TopSpeedSimResults", f"{CONFIG_NAME}.csv")
 
-        if os.path.isfile(lift_drag_csv):
-            rerun_flag = input(f"Existing CSV found for vehicle with the name {CONFIG_NAME}.\nPlease type Y to use this, else press any other key to re-generate the csv.")
+        rerun_flag = ""
+        while not rerun_flag:
+            if os.path.isfile(lift_drag_csv):
+                rerun_flag = input(f"Existing CSV found for vehicle with the name {CONFIG_NAME}.\nPlease type Y to use this or N to re-generate the csv. ")
+            print(rerun_flag.upper())
+            if rerun_flag.strip().upper() == "Y" or rerun_flag.strip().upper() == "N":
+                break
+            else:
+                rerun_flag = ""
+            print(rerun_flag)
         
-        if not os.path.isfile(lift_drag_csv) or rerun_flag == "Y":
+        if not os.path.isfile(lift_drag_csv) or rerun_flag == "N":
             sizingEstimation.generate_csv_from_file(vspfile=vspfile, csvoutput=lift_drag_csv, altitude_range=altitude_range, mach_range=mach_range, config=config)
         
         config['drag_lookup'] = build_lift_drag_interp(lift_drag_csv, wing_area)
+        config['thrust_interp'] = thrust_model(constant_thrust)
+        config['sfc_interp'] = sfc_model(config['constant_sfc'])
 
         # Build the starting state for the sim. Start at base velocity and base mach
-        _, t_start = get_atmosphere(altitude_range[0]) # Comes back in rankine
+        rho_start, t_start = get_atmosphere(altitude_range[0]) # Comes back in rankine
         sos_start = np.sqrt(GAMMA * R * t_start)
         initial_velocity = mach_range[0] * sos_start
         state = {
@@ -596,12 +642,20 @@ if __name__ == "__main__":
             'fuel': np.array([config['fuel_capacity']]),
             'time': np.array([0.0]),
             'thrust': np.array([0.0]),
-            'Cl': np.array([0.0]),
-            'Cd': np.array([0.0]),
+            'CL': np.array([0.0]),
+            'CD': np.array([0.0]),
             'lift': np.array([0.0]),
             'drag': np.array([0.0]),
             'F_long': np.array([0.0]),
+            'temp' : np.array([t_start]),
+            'rho' : np.array([rho_start]),
             'i': 0
         }
 
         climb(state=state,config=config)
+
+        straight(state=state,config=config)
+
+        plot_results(state=state,config=config)
+
+        print(f"Final Time: {state['time'][-1]}")

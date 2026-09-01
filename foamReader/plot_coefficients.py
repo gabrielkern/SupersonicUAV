@@ -3,7 +3,7 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 
-DEFAULT_DAT_FILE = "/Users/gabrielkern/Documents/OpenFOAM/SupersonicUAV/postProcessing/forceCoeffs1/0/coefficient.dat"
+DEFAULT_DAT_FILE = "/Users/gabrielkern/Documents/OpenFOAM/SupersonicUAV/postProcessing/forceCoeffs1/0.0132/coefficient.dat"
 
 
 def parse_header(path) -> list[str]:

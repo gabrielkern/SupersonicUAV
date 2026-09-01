@@ -1,20 +1,20 @@
 PARASITE DRAG BUILD UP DATA 
 
 Mach, Altitude (ft), Vinf (Mach), S_ref (ft^2)
-0.900000, 0.000000, 0.900000, 1.000000 
+0.990000, 30000.000000, 0.990000, 1.000000 
 
 Temp (F), Pressure (lbf/ft^2), Density (slug/ft^3) 
-59.000000, 2116.216195, 0.002377 
+-47.984800, 628.433989, 0.000889 
 
 Lam Cf Eqn, Turb Cf Eqn 
 Laminar Blasius, Spalding-Chi Explicit Empirical Fit 
 
 Component Name,S_wet (ft^2),L_ref (ft),t/c or d/l,FF,FF Eqn Type,Re,% Lam,Cf,Q (Interference Factor),f (ft^2),Cd,% Total 
-Main_Wing,1.447178, 0.869277, 0.039876,1.060602, Schemensky 6 Series AF,5555201.740542, 0.000000,0.003246, 1.000000,0.004982, 0.004982, 57.748309 
-Fuselage,1.128557, 2.249748, 10.129864,1.053259, Hoerner Streamlined Body,14377239.235954, 0.000000,0.002788, 1.100000,0.003645, 0.003645, 42.251691 
+Main_Wing,1.447178, 0.869277, 0.039876,1.060602, Schemensky 6 Series AF,2450793.997840, 0.000000,0.003728, 1.000000,0.005722, 0.005722, 57.948321 
+Fuselage,1.128557, 2.249748, 10.129864,1.053259, Hoerner Streamlined Body,6342821.245869, 0.000000,0.003176, 1.100000,0.004153, 0.004153, 42.051679 
 
 Excrescences, Type, Input
 
- , , , , , , , , , Geometry Sub-Total:, 0.008627, 0.008627, 100.000000 
+ , , , , , , , , , Geometry Sub-Total:, 0.009875, 0.009875, 100.000000 
  , , , , , , , , , Excrescence Sub-Total:, 0.000000, 0.000000, 0.000000 
- , , , , , , , , , Totals:, 0.008627, 0.008627, 100.000000 
+ , , , , , , , , , Totals:, 0.009875, 0.009875, 100.000000 
