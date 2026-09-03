@@ -32,7 +32,7 @@ M_5 = 0.5
 # if try to push before pull run:     cd SupersonicUAV    then   git reset --soft HEAD~1
 #############################################################################
 class tubojet_calc:
-    def __init__(self,vel,h,A0):
+    def __init__(self):
        self.M_2=0.5
        self.nr=0.98
        self.M_3=0.2
@@ -99,7 +99,7 @@ class tubojet_calc:
 
         return p, T, rho, a, mu
 
-    def altitude_corrections(self,vel,h,A0):
+    def altitude_corrections(self,vel,h):
         #T0/T = 1 + (γ-1)/2 · M²
         #P0/P = [1 + (γ-1)/2 · M²]^(γ/(γ-1))
         #ρ0/ρ = [1 + (γ-1)/2 · M²]^(1/(γ-1))
@@ -108,18 +108,18 @@ class tubojet_calc:
         T_stag = T_stat * (1+ (self.GAM-1)/2*M**2)
         P_stag = P_stat * (1+ (self.GAM-1)/2*M**2)**(self.GAM/(self.GAM-1))
         rho_stag = rho * (1+ (self.GAM-1)/2*M**2)**(1/(self.GAM-1))
-        m_dot = A0*rho*vel
 
-        return T_stag, P_stag, P_stat, T_stat,m_dot
+        return T_stag, P_stag, P_stat, T_stat
 
-    def inlet(self,h,vel,A0):
-        T1_stag,P1_stag, P1_stat,T1_stat,m_dot = self.altitude_corrections(vel,h,A0)
+    def inlet(self,h,vel,A2):
+        T1_stag,P1_stag, P1_stat,T1_stat = self.altitude_corrections(vel,h)
         T2_stag = T1_stag
         P2_stag = self.nr*P1_stag
         T2_stat = T2_stag / (1+ (self.GAM-1)/2*self.M_2**2)
         P2_stat = P2_stag / (1+ (self.GAM-1)/2*self.M_2**2)**(self.GAM/(self.GAM-1))
         rho2_stat = P2_stat / (self.R*T2_stat)
         V2 =  (self.GAM*self.R*T2_stat)**0.5 * self.M_2
+        m_dot = A2 * rho2_stat * V2
         return T1_stag,T1_stat,P1_stag,P1_stat,T2_stag,T2_stat,P2_stag,P2_stat,V2,rho2_stat,m_dot
 
     def compressor(self,T2_0,P2_0):
@@ -164,7 +164,7 @@ class tubojet_calc:
         PR_availible = P6_0 /P_ambient
 
         if PR_availible <= PR_crit: # not choked or fully expanded
-            print("non-choked")
+            #print("non-choked")
             M_6 = ( 2/(self.GAM-1) * ((PR_availible)**((self.GAM-1)/self.GAM)-1))**0.5
             T6 = T6_0 / (1+(self.GAM-1)/2*M_6**2)
             P6 = P6_0 / (1+(self.GAM-1)/2*M_6**2)**(self.GAM/(self.GAM-1))
@@ -172,7 +172,7 @@ class tubojet_calc:
             rho6_stat = P6 / (self.R*T6)
             P_thrust = 0 # pressure thrust
         else:                       # choked case means pressure thrust
-            print("choked")
+            #print("choked")
             M_6 = 1 # at throat
             T6 = T6_0/((self.GAM+1)/2)
             P6 = P6_0 /((self.GAM+1)/2)**(self.GAM/(self.GAM-1))
@@ -185,22 +185,41 @@ class tubojet_calc:
 
         return T6_0,T6,P6_0,P6,V6,rho6_stat,Thrust
 
-    def thrust(self, h, vel, A0):
-        T1_stag, T1_stat, P1_stag, P1_stat, T2_stag, T2_stat, P2_stag, P2_stat, V2, rho2_stat, m_dot = self.inlet(h, vel,A0)
+    def thrust(self, h, vel, A2):
+        T1_stag, T1_stat, P1_stag, P1_stat, T2_stag, T2_stat, P2_stag, P2_stat, V2, rho2_stat, m_dot = self.inlet(h, vel, A2)
         T3_0, T3, P3_0, P3, V3, rho3_stat, work_comp = self.compressor(T2_stag, P2_stag)
         T4_0, T4, P4_0, P4, V4, rho4_stat, f, m4_dot = self.combustion(T3_0, P3_0, m_dot)
         T5_0, T5, P5_0, P5, V5, rho5_stat = self.turbine(P4_0, work_comp)
         T6_0, T6, P6_0, P6, V6, rho6_stat, Thrust = self.nozzle(T5_0, P5_0, h, m4_dot, m_dot, vel)
-        TSFC = f*m_dot*self.g / Thrust # pounds/s
+        if Thrust>0:
+            TSFC = f*m_dot*self.g / Thrust # pounds/s
+        else:
+            TSFC=0
 
         T_stations = [T1_stat, T2_stat, T3, T4, T5, T6]
         P_stations = [P1_stat, P2_stat, P3, P4, P5, P6]
 
         return Thrust, T_stations, P_stations,TSFC
 
-Teng = tubojet_calc(vel=[700], h=[10000], A0=0.05)
-F, T_stations, P_stations, TSFC = Teng.thrust(h=[10000], vel=[700],A0=0.05)
-print(F)
-print(T_stations)
-print(P_stations)
-print(TSFC)
+
+vel = np.linspace(0,1000,100)
+h = np.linspace(0,10000,100)
+A2 = 0.05 # reference area for compressor section
+vel_mesh,h_mesh = np.meshgrid(vel,h)
+thirst = tubojet_calc()
+
+Thrust_grid = np.zeros(vel_mesh.shape)
+for i in range(vel_mesh.shape[0]):
+    for k in range(h_mesh.shape[1]):
+        F, _, _, _ = thirst.thrust([h_mesh[i,k]], np.array([vel_mesh[i,k]]), A2)
+        Thrust_grid[i,k] = float(F)
+
+
+from mpl_toolkits.mplot3d import Axes3D
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.plot_surface(vel_mesh, h_mesh, Thrust_grid, cmap='viridis')
+ax.set_xlabel('Velocity (ft/s)')
+ax.set_ylabel('Altitude (ft)')
+ax.set_zlabel('Thrust (lbf)')
+plt.show()
