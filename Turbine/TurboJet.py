@@ -29,6 +29,7 @@ nt = 0.9 # turbine efficiency
 M_5 = 0.5
 '''
 
+# if try to push before pull run:     cd SupersonicUAV    then   git reset --soft HEAD~1
 #############################################################################
 class tubojet_calc:
     def __init__(self,vel,h,A0):
