@@ -1,6 +1,6 @@
 import numpy as np
-import math as m
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # T0 is stag or total temp
 
@@ -165,6 +165,7 @@ class tubojet_calc:
 
         if PR_availible <= PR_crit: # not choked or fully expanded
             #print("non-choked")
+            mode = 0
             M_6 = ( 2/(self.GAM-1) * ((PR_availible)**((self.GAM-1)/self.GAM)-1))**0.5
             T6 = T6_0 / (1+(self.GAM-1)/2*M_6**2)
             P6 = P6_0 / (1+(self.GAM-1)/2*M_6**2)**(self.GAM/(self.GAM-1))
@@ -173,6 +174,7 @@ class tubojet_calc:
             P_thrust = 0 # pressure thrust
         else:                       # choked case means pressure thrust
             #print("choked")
+            mode = 1
             M_6 = 1 # at throat
             T6 = T6_0/((self.GAM+1)/2)
             P6 = P6_0 /((self.GAM+1)/2)**(self.GAM/(self.GAM-1))
@@ -183,23 +185,25 @@ class tubojet_calc:
 
         Thrust = m4_dot*V6-m_dot*vel+P_thrust
 
-        return T6_0,T6,P6_0,P6,V6,rho6_stat,Thrust
+        return T6_0,T6,P6_0,P6,V6,rho6_stat,Thrust, mode
 
     def thrust(self, h, vel, A2):
         T1_stag, T1_stat, P1_stag, P1_stat, T2_stag, T2_stat, P2_stag, P2_stat, V2, rho2_stat, m_dot = self.inlet(h, vel, A2)
         T3_0, T3, P3_0, P3, V3, rho3_stat, work_comp = self.compressor(T2_stag, P2_stag)
         T4_0, T4, P4_0, P4, V4, rho4_stat, f, m4_dot = self.combustion(T3_0, P3_0, m_dot)
         T5_0, T5, P5_0, P5, V5, rho5_stat = self.turbine(P4_0, work_comp)
-        T6_0, T6, P6_0, P6, V6, rho6_stat, Thrust = self.nozzle(T5_0, P5_0, h, m4_dot, m_dot, vel)
+        T6_0, T6, P6_0, P6, V6, rho6_stat, Thrust, mode = self.nozzle(T5_0, P5_0, h, m4_dot, m_dot, vel)
         if Thrust>0:
             TSFC = f*m_dot*self.g / Thrust # pounds/s
         else:
             TSFC=0
 
+        Momentum_Thrust = m4_dot*V6
+        Ram_Drag = m_dot*vel
         T_stations = [T1_stat, T2_stat, T3, T4, T5, T6]
         P_stations = [P1_stat, P2_stat, P3, P4, P5, P6]
 
-        return Thrust, T_stations, P_stations,TSFC
+        return Thrust, T_stations, P_stations, TSFC, mode, Momentum_Thrust, Ram_Drag
 
 
 vel = np.linspace(0,1000,100)
@@ -209,17 +213,48 @@ vel_mesh,h_mesh = np.meshgrid(vel,h)
 thirst = tubojet_calc()
 
 Thrust_grid = np.zeros(vel_mesh.shape)
+TSFC_grid = np.zeros(vel_mesh.shape)
+Momentum_grid = np.zeros(vel_mesh.shape)
+RamDrag_grid = np.zeros(vel_mesh.shape)
 for i in range(vel_mesh.shape[0]):
     for k in range(h_mesh.shape[1]):
-        F, _, _, _ = thirst.thrust([h_mesh[i,k]], np.array([vel_mesh[i,k]]), A2)
+        F, _, _, TSFC,_, Momentum_Thrust,Ram_Drag = thirst.thrust([h_mesh[i,k]], np.array([vel_mesh[i,k]]), A2)
         Thrust_grid[i,k] = float(F)
+        TSFC_grid[i,k] = float(TSFC*1e3)
+        Momentum_grid[i,k] = float(Momentum_Thrust)
+        RamDrag_grid[i,k] = float(Ram_Drag)
 
 
-from mpl_toolkits.mplot3d import Axes3D
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-ax.plot_surface(vel_mesh, h_mesh, Thrust_grid, cmap='viridis')
-ax.set_xlabel('Velocity (ft/s)')
-ax.set_ylabel('Altitude (ft)')
-ax.set_zlabel('Thrust (lbf)')
+
+fig = plt.figure(figsize=(15, 9))
+
+ax1 = fig.add_subplot(2, 2, 1, projection='3d')
+ax1.plot_surface(vel_mesh, h_mesh, Thrust_grid, cmap='viridis')
+ax1.set_title('Thrust')
+ax1.set_xlabel('Velocity (ft/s)')
+ax1.set_ylabel('Altitude (ft)')
+ax1.set_zlabel('Thrust (lbf)')
+
+ax2 = fig.add_subplot(2, 2, 2, projection='3d')
+ax2.plot_surface(vel_mesh, h_mesh, TSFC_grid, cmap='viridis')
+ax2.set_title('Thrust Specific Fuel Consumption')
+ax2.set_xlabel('Velocity (ft/s)')
+ax2.set_ylabel('Altitude (ft)')
+ax2.set_zlabel('TSFC lb/s *10^-3')
+
+ax3 = fig.add_subplot(2, 2, 3, projection='3d')
+ax3.plot_surface(vel_mesh, h_mesh, Momentum_grid, cmap='viridis')
+ax3.set_title('Momentum Thrust')
+ax3.set_xlabel('Velocity (ft/s)')
+ax3.set_ylabel('Altitude (ft)')
+ax3.set_zlabel('Momentum Thrust (lbf)')
+
+ax4 = fig.add_subplot(2, 2, 4, projection='3d')
+ax4.plot_surface(vel_mesh, h_mesh, RamDrag_grid, cmap='viridis')
+ax4.set_title('Ram Drag')
+ax4.set_xlabel('Velocity (ft/s)')
+ax4.set_ylabel('Altitude (ft)')
+ax4.set_zlabel('Ram Drag (lbf)')
+
+plt.tight_layout()
 plt.show()
