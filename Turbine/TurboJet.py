@@ -3,32 +3,6 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 # T0 is stag or total temp
-
-'''
-vel = [700] # ft/s
-h = [10000] # ft
-
-#inlet
-M_2 = 0.5 # mach at compressor front
-nr = 0.98 # recovery factor
-A0 = 0.05 #sqft reference area for mass flow
-
-#comperessor
-PR = 3 # p3_ideal/p2
-nc = 0.87 # isentropic efficiency
-M_3 = 0.2 # mach in combustion
-
-#cumbust
-M_4 = M_3
-npres = 0.95 # pressure loss factor
-T4_0 = 1600 # temperature at the turbine face
-h_PR = 4.61e8 # fuel heating value based on Kerosene based JP-8
-
-#turbine
-nt = 0.9 # turbine efficiency
-M_5 = 0.5
-'''
-
 # if try to push before pull run:     cd SupersonicUAV    then   git reset --soft HEAD~1
 #############################################################################
 class tubojet_calc:
