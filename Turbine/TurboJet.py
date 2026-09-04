@@ -171,7 +171,7 @@ class tubojet_calc:
             P6 = P6_0 / (1+(self.GAM-1)/2*M_6**2)**(self.GAM/(self.GAM-1))
             V6 = M_6*(self.GAM*self.R*T6)**0.5
             rho6_stat = P6 / (self.R*T6)
-            P_thrust = 0 # pressure thrust
+            P_thrust = 0.0001 # pressure thrust
         else:                       # choked case means pressure thrust
             #print("choked")
             mode = 1
@@ -185,14 +185,14 @@ class tubojet_calc:
 
         Thrust = m4_dot*V6-m_dot*vel+P_thrust
 
-        return T6_0,T6,P6_0,P6,V6,rho6_stat,Thrust, mode
+        return T6_0,T6,P6_0,P6,V6,rho6_stat,Thrust, mode, P_thrust
 
     def thrust(self, h, vel, A2):
         T1_stag, T1_stat, P1_stag, P1_stat, T2_stag, T2_stat, P2_stag, P2_stat, V2, rho2_stat, m_dot = self.inlet(h, vel, A2)
         T3_0, T3, P3_0, P3, V3, rho3_stat, work_comp = self.compressor(T2_stag, P2_stag)
         T4_0, T4, P4_0, P4, V4, rho4_stat, f, m4_dot = self.combustion(T3_0, P3_0, m_dot)
         T5_0, T5, P5_0, P5, V5, rho5_stat = self.turbine(P4_0, work_comp)
-        T6_0, T6, P6_0, P6, V6, rho6_stat, Thrust, mode = self.nozzle(T5_0, P5_0, h, m4_dot, m_dot, vel)
+        T6_0, T6, P6_0, P6, V6, rho6_stat, Thrust, mode, P_thrust = self.nozzle(T5_0, P5_0, h, m4_dot, m_dot, vel)
         if Thrust>0:
             TSFC = f*m_dot*self.g / Thrust # pounds/s
         else:
@@ -203,9 +203,73 @@ class tubojet_calc:
         T_stations = [T1_stat, T2_stat, T3, T4, T5, T6]
         P_stations = [P1_stat, P2_stat, P3, P4, P5, P6]
 
-        return Thrust, T_stations, P_stations, TSFC, mode, Momentum_Thrust, Ram_Drag
+        return Thrust, T_stations, P_stations, TSFC, mode, Momentum_Thrust, Ram_Drag ,m4_dot,V6, P_thrust
 
 
+
+'''
+vel = np.linspace(0, 1500, 200)   # finer resolution since it's just 1D now, cheap to run
+h_fixed = 5000                     # pick one altitude to slice at
+A2 = 0.05
+
+thirst = tubojet_calc()
+
+Thrust_list = np.zeros(vel.shape)
+TSFC_list = np.zeros(vel.shape)
+Momentum_list = np.zeros(vel.shape)
+RamDrag_list = np.zeros(vel.shape)
+m4dot_list = np.zeros(vel.shape)
+V6_list = np.zeros(vel.shape)
+Pthrust_list = np.zeros(vel.shape)
+
+for i, v in enumerate(vel):
+    F, _, _, TSFC, _, Momentum_Thrust, Ram_Drag, m4_dot, V6, P_thrust = thirst.thrust([h_fixed], np.array([v]), A2)
+    Thrust_list[i] = float(F)
+    TSFC_list[i] = float(TSFC)
+    Momentum_list[i] = float(Momentum_Thrust)
+    RamDrag_list[i] = float(Ram_Drag)
+    m4dot_list[i] = float(m4_dot)
+    V6_list[i] = float(V6)
+    Pthrust_list[i] = float(P_thrust)
+
+fig, axs = plt.subplots(2, 3, figsize=(15, 8))
+
+axs[0,0].plot(vel, Thrust_list)
+axs[0,0].set_title('Thrust')
+axs[0,0].set_xlabel('Velocity (ft/s)')
+axs[0,0].set_ylabel('Total Thrust (lbf)')
+
+axs[0,1].plot(vel, Momentum_list, label='Momentum Thrust')
+axs[0,1].plot(vel, Pthrust_list, label='Ram Drag')
+axs[0,1].set_title('Momentum and Pressure Thrust')
+axs[0,1].set_xlabel('Velocity (ft/s)')
+axs[0,1].set_ylabel('lbf')
+axs[0,1].legend()
+
+axs[0,2].plot(vel, RamDrag_list)
+axs[0,2].set_title('Ram Drag')
+axs[0,2].set_xlabel('Velocity (ft/s)')
+axs[0,2].set_ylabel('lbf')
+
+axs[1,0].plot(vel, m4dot_list)
+axs[1,0].set_title('m4_dot')
+axs[1,0].set_xlabel('Velocity (ft/s)')
+axs[1,0].set_ylabel('slug/s')
+
+axs[1,1].plot(vel, V6_list)
+axs[1,1].set_title('V6')
+axs[1,1].set_xlabel('Velocity (ft/s)')
+axs[1,1].set_ylabel('ft/s')
+
+axs[1,2].plot(vel, TSFC_list)
+axs[1,2].set_title('TSFC')
+axs[1,2].set_xlabel('Velocity (ft/s)')
+axs[1,2].set_ylabel('lb/(lbf·s)')
+
+plt.tight_layout()
+plt.show()
+
+'''
 vel = np.linspace(0,1000,100)
 h = np.linspace(0,10000,100)
 A2 = 0.05 # reference area for compressor section
@@ -218,14 +282,11 @@ Momentum_grid = np.zeros(vel_mesh.shape)
 RamDrag_grid = np.zeros(vel_mesh.shape)
 for i in range(vel_mesh.shape[0]):
     for k in range(h_mesh.shape[1]):
-        F, _, _, TSFC,_, Momentum_Thrust,Ram_Drag = thirst.thrust([h_mesh[i,k]], np.array([vel_mesh[i,k]]), A2)
+        F, _, _, TSFC,_, Momentum_Thrust,Ram_Drag,m4_dot,V6, P_thrust = thirst.thrust([h_mesh[i,k]], np.array([vel_mesh[i,k]]), A2)
         Thrust_grid[i,k] = float(F)
         TSFC_grid[i,k] = float(TSFC*1e3)
         Momentum_grid[i,k] = float(Momentum_Thrust)
         RamDrag_grid[i,k] = float(Ram_Drag)
-
-
-
 fig = plt.figure(figsize=(15, 9))
 
 ax1 = fig.add_subplot(2, 2, 1, projection='3d')
@@ -247,7 +308,7 @@ ax3.plot_surface(vel_mesh, h_mesh, Momentum_grid, cmap='viridis')
 ax3.set_title('Momentum Thrust')
 ax3.set_xlabel('Velocity (ft/s)')
 ax3.set_ylabel('Altitude (ft)')
-ax3.set_zlabel('Momentum Thrust (lbf)')
+ax3.set_zlabel('Moment Thrust (lbf)')
 
 ax4 = fig.add_subplot(2, 2, 4, projection='3d')
 ax4.plot_surface(vel_mesh, h_mesh, RamDrag_grid, cmap='viridis')
