@@ -1,7 +1,5 @@
 """
-Lap Simulator for Banner Optimizer
-
-Point-mass flight dynamics simulator for M3 banner towing mission.
+Lap Simulator for Supersonic UAV
 """
 
 import os
@@ -222,6 +220,8 @@ def climb(state: dict, config: dict):
     thrust_interp = config['thrust_interp']
     sfc_interp = config['sfc_interp']
 
+    print(EW)
+
     i = state['i']
 
     while (state['position'][i, 1] <= cruise_alt) and (state['fuel'][i] >= config['landing_fuel_frac']*config['fuel_capacity']):
@@ -274,17 +274,21 @@ def climb(state: dict, config: dict):
         state['F_long'] = np.append(state['F_long'], new_acceleration * m)
         state['temp'] = np.append(state['temp'], T)
         state['rho'] = np.append(state['rho'], rho)
+        state['mach'] = np.append(state['mach'], mach)
         i += 1
         state['i'] = i
 
-        print(state['CL'][-1])
-        print(state['CD'][-1])
-        print(state['lift'][-1])
-        print(state['drag'][-1])
-        print(state['velocity'][-1])
-        print(state['rho'][-1])
-        print(state['CD'][-1]*0.5*state['rho'][-1]*state['velocity'][-1]**2)
-        input()
+        # print("-"*60)
+        # print(f"Thrust: {thrust}")
+        # print(f"Drag: {drag}")
+        # print(f"CD: {CD_Climb}")
+        # print(f"Weight: {W}")
+        # print(f"Theta: {theta}")
+        # print(f"Mass: {m}")
+        # print(f"Acceleration: {new_acceleration}")
+        # print(f"Velocity: {new_velocity}")
+        # input()
+
 
 def straight(state: dict, config: dict):
     """
@@ -349,6 +353,7 @@ def straight(state: dict, config: dict):
         state['F_long'] = np.append(state['F_long'], new_acceleration * m)
         state['temp'] = np.append(state['temp'], T)
         state['rho'] = np.append(state['rho'], rho)
+        state['mach'] = np.append(state['mach'], mach)
         i += 1
         state['i'] = i
 
@@ -417,13 +422,9 @@ def execute_lap_sim(constants: Dict):
         return lap_counter
 
     except LowThrustException:
-        return 0
+        raise
     except Exception as e:
-        if debug:
-            print(f"Error in lap simulation: {e}")
-            import traceback
-            traceback.print_exc()
-        return 0
+        raise
     
 def generate_max_speed_plot(altitude_range, wing_area_range, thrust, lift_drag_interp, weights = None):
     """
@@ -489,15 +490,15 @@ def plot_results(state: dict, config: dict):
 
     # Row 1: Velocities, Battery, Position
     ax1 = fig.add_subplot(gs[0, 0])
-    ax1.plot(state['time'], state['velocity'], 'b-', linewidth=2, label='Absolute Velocity')
-    ax1.set_xlabel("Time (s)"); ax1.set_ylabel("Velocity (ft/s)")
+    ax1.plot(state['time'], state['mach'], 'b-', linewidth=2, label='Absolute Velocity')
+    ax1.set_xlabel("Time (s)"); ax1.set_ylabel("Mach")
     ax1.set_title("Velocity vs Time"); ax1.grid(True); ax1.legend()
 
     ax2 = fig.add_subplot(gs[0, 1])
     ax2.plot(state['time'], state['fuel'], 'g-', linewidth=2, label="Fuel remaining")
-    ax2.plot(state['time'], (np.ones_like(state['time']) * config['landing_fuel_frac'] * config['fuel_capacity']), 'g-', linewidth=2, label="Landing fuel minimum")
+    ax2.plot(state['time'], (np.ones_like(state['time']) * config['landing_fuel_frac'] * config['fuel_capacity']), 'r.', linewidth=2, label="Landing fuel minimum")
     ax2.set_xlabel("Time (s)"); ax2.set_ylabel("Fuel Mass (lbm)")
-    ax2.set_title("Fuel Mass vs Time"); ax2.grid(True)
+    ax2.set_title("Fuel Mass vs Time"); ax2.grid(True); ax2.legend()
 
     ax3 = fig.add_subplot(gs[0, 2])
     ax3.plot(state['time'], state['position'][:,0], 'b-', linewidth=2, label='Traveled Distance')
@@ -562,30 +563,36 @@ if __name__ == "__main__":
     else:
         print("Running the full top speed simulator.")
 
-        CONFIG_NAME = "Full_Sweep_Test"
+        CONFIG_NAME = "Mach1UAV_V2"
 
         print(f"Vehicle identifier: {CONFIG_NAME}")
 
-        altitude_range = (0,30000,31) # ft
-        mach_range = (0.01,0.99,10)
-        alpha_range = (-5,20,26)
-        constant_thrust = 50 # lbs
-        climb_angle = 15 # deg
+        altitude_range = (0,10000,2) # ft
+        mach_range = (0.1,0.9,2)
+        alpha_range = (-5,20,13)
+        constant_thrust = 95 # lbs
+        climb_angle = 25 # deg
         cruise_altitude = 1000
-        wing_area = 1 # ft^2
+        wing_area = 3.201 # ft^2
         max_cl = 0.70 # based on airfoil
         wing_thickness = 0.04
-        root_chord = 1.4
-        tip_chord = 0.1
-        b_ref = 1.4
-        c_ref = 0.87
-        cg_distance_x = 1.3
-        le_sweep = 60
-        technology_factor = 0.87
+        root_chord = 2.1882933333 # feet
+        tip_chord = 0.3724675 # feet
+        b_ref = 2.5 # feet
+        c_ref = 1.4949791667 # feet
+        cg_distance_x = 3.33333 # inches
+        le_sweep = 60 # degrees
+        technology_factor = 0.87 # For 6 series
         fuel_frac_empty = 1.333 # Ratio of structural weight to fuel weight
         landing_fuel_frac = 0.25 # % fuel where landing is required and simulation cannot continue
 
-        vspfile = "/Users/gabrielkern/Documents/hypersonics/supersonicUAV/OpenVSP/Mach1Sizing/Mach1_Sizing.vsp3"
+        model_unit = 'in' # unit of the model, 'in', 'ft', or 'm' rn
+
+        vspfile = "/Users/gabrielkern/Documents/hypersonics/supersonicUAV/OpenVSP/OpenVSPConceptualDesign/Mach1UAV_V2.vsp3"
+
+        # print(f"Input: {wing_area}")
+        # print(f"Weight: {weight_from_wing_area(wing_area)}")
+        # print(f"Fuel Weight: {weight_from_wing_area(wing_area) * fuel_frac_empty}")
 
         config = {
             'wing_area': wing_area,
@@ -599,7 +606,7 @@ if __name__ == "__main__":
             'effective_sweep': sizingEstimation.le_sweep_to_quarter_chord_sweep(le_sweep, b_ref, root_chord, tip_chord),
             'technology_factor': technology_factor,
             'structural_weight': weight_from_wing_area(wing_area),
-            'g': 32.174,
+            'g': g,
             'dt': 0.01,
             'fuel_capacity': weight_from_wing_area(wing_area) * fuel_frac_empty, # In lbs
             'constant_thrust': constant_thrust,
@@ -608,21 +615,23 @@ if __name__ == "__main__":
             'theta': climb_angle,
             'CL_stall': max_cl,
             'landing_fuel_frac': landing_fuel_frac,
-            'constant_sfc': sfc_from_thrust(constant_thrust)
+            'constant_sfc': sfc_from_thrust(constant_thrust),
+            'model_unit': model_unit
         }
 
-        lift_drag_csv = os.path.join(os.path.dirname(__file__), "TopSpeedSimResults", f"{CONFIG_NAME}.csv")
+        lift_drag_csv = os.path.join(os.path.dirname(vspfile), f"{CONFIG_NAME}.csv")
 
         rerun_flag = ""
         while not rerun_flag:
             if os.path.isfile(lift_drag_csv):
                 rerun_flag = input(f"Existing CSV found for vehicle with the name {CONFIG_NAME}.\nPlease type Y to use this or N to re-generate the csv. ")
-            print(rerun_flag.upper())
+            else:
+                print("File not found. Generating now.")
+                break
             if rerun_flag.strip().upper() == "Y" or rerun_flag.strip().upper() == "N":
                 break
             else:
                 rerun_flag = ""
-            print(rerun_flag)
         
         if not os.path.isfile(lift_drag_csv) or rerun_flag == "N":
             sizingEstimation.generate_csv_from_file(vspfile=vspfile, csvoutput=lift_drag_csv, altitude_range=altitude_range, mach_range=mach_range, config=config)
@@ -649,6 +658,7 @@ if __name__ == "__main__":
             'F_long': np.array([0.0]),
             'temp' : np.array([t_start]),
             'rho' : np.array([rho_start]),
+            'mach': np.array([mach_range[0]]),
             'i': 0
         }
 

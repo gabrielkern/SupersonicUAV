@@ -10,10 +10,6 @@ from scipy.interpolate import interp1d
 
 import create_base_Mach1UAV, variable_plane_analysis, variable_plane_parasitic, wave_drag
 
-# Make subfolder for all the OpenVSP slop
-curdir = os.getcwd()
-os.chdir(curdir + os.sep + 'Mach1Sizing')
-
 @contextmanager
 def suppress_output():
     """Context manager to suppress stdout and stderr output."""
@@ -546,11 +542,13 @@ if __name__ == '__main__':
     parser.add_argument('--sweep-le', action='store_true',
                          help='Sweep LE sweep angle across altitude and mach (wing area held '
                               'fixed) instead of running the single manual test configuration.')
+    parser.add_argument('--mac', action='store_true',
+                         help='Get the MAC for a specified wing.')
     args = parser.parse_args()
 
-    print("="*60)
-    print("CONFIGURATIONS")
-    print("="*60)
+    # Subfolder for all the OpenVSP slop
+    curdir = os.getcwd()
+    os.chdir(curdir + os.sep + 'Mach1Sizing')
 
     if args.sweep_le:
         le_sweep_range = [0, 15, 30, 45, 60, 75]
@@ -593,7 +591,16 @@ if __name__ == '__main__':
         plot_sweep_results(all_results, group_keys=('le_sweep', 'altitude'))
         if len(le_sweep_range) != 1 and len(altitude_range) != 1:
             plot_sweep_altitude_mach_contour(all_results)
-
+    elif args.mac:
+        chords = [26.25952, 4.46961]
+        span = [15.00000]
+        sweep = [60]
+        mac_result = MAC(chords, span, sweep)
+        print("Mean Aerodynamic Chord Results:")
+        print(f"MAC length in model's length unit: {mac_result['mac']}.")
+        print(f"Located at span location: {mac_result['mac_span_location']}.")
+        print(f"With distance from front of wing: {mac_result['quarter_mac_le_distance']}.")
+        print(f"Located in wing section: {mac_result['mac_section']}.")
     else:
         # Test with single manual configuration
         planform_sweep = [1]

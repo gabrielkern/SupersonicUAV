@@ -1,0 +1,24 @@
+...Comp Geom...
+4 Num Comps
+7 Total Num Meshes
+4928 Total Num Tris
+
+Theo_Area   Wet_Area   Theo_Vol    Wet_Vol  Name
+  892.971    857.729   1167.520   1155.749  Fuse           
+  480.944    404.023    108.492     93.928  Wing           
+  480.944    404.023    108.492     93.928  Wing           
+   56.211     56.211      3.746      3.746  VStab          
+   56.211     56.211      3.746      3.746  VStab          
+   54.562     50.174      3.538      3.353  Canards        
+   54.562     50.174      3.538      3.353  Canards        
+-------------------------------------------------
+ 2076.405   1878.545   1399.072   1357.803  Totals         
+
+Tag_Theo_Area   Tag_Wet_Area    Tag_Name
+      892.971        857.729    Fuse_S_Surf0   
+      480.944        404.023    Wing_S_Surf0   
+      480.944        404.023    Wing_S_Surf1   
+       56.211         56.211    VStab_S_Surf0  
+       56.211         56.211    VStab_S_Surf1  
+       54.562         50.174    Canards_S_Surf0
+       54.562         50.174    Canards_S_Surf1

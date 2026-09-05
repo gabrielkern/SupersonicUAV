@@ -1,0 +1,21 @@
+# VSPGEOM v3 Tag Key File
+/Users/gabrielkern/Documents/hypersonics/supersonicUAV/OpenVSP/OpenVSPConceptualDesign/Mach1UAV_V2.vspgeom
+6
+
+# part#,geom#,surf#,gname,gid,thick,plate,copy#,geomcopy#
+1,2,0,Wing_C,IFPVMHPXXL,0,3,1,3
+2,2,1,Wing_C,IFPVMHPXXL,0,3,2,3
+3,1,0,VStab_C,IMXLQBPQIW,0,3,1,2
+4,1,1,VStab_C,IMXLQBPQIW,0,3,2,2
+5,0,0,Canards_C,QORJEJRGAZ,0,3,1,1
+6,0,1,Canards_C,QORJEJRGAZ,0,3,2,1
+
+6
+
+# tag#,part#,ssname1,ssname2,...,ssid1,ssid2,...
+1,1
+2,2
+3,3
+4,4
+5,5
+6,6

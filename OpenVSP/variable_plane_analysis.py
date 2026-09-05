@@ -96,6 +96,7 @@ def setup_vspaero_inputs(vsp_aero_data: Dict):
     # Set center of gravity location [ft]
     # vsp.SetIntAnalysisInput(ANALYSIS_TYPE, "UseCGModeFlag", [1], 0)  # Use CG mode
     # vsp.SetIntAnalysisInput(ANALYSIS_TYPE, "CGGeomSet", [vsp.SET_ALL], 0)  # Use all geometry for CG
+
     vsp.SetDoubleAnalysisInput(vsp_aero_data['vsp_analysis'], "Xcg", [vsp_aero_data['x_rel']], 0)
     vsp.SetDoubleAnalysisInput(vsp_aero_data['vsp_analysis'], "Ycg", [0.0], 0)
     vsp.SetDoubleAnalysisInput(vsp_aero_data['vsp_analysis'], "Zcg", [0.0], 0)
@@ -285,10 +286,27 @@ def main(config, filename=None):
     vsp_aero_data['geom_analysis'] = geom_analysis
 
     # Ref parameters
-    vsp_aero_data['s_ref'] = config['wing_area']
-    vsp_aero_data['b_ref'] = config['wing_span']
-    vsp_aero_data['c_ref'] = config['MAC']
-    vsp_aero_data['x_rel'] = config['x_rel']
+    if config['model_unit'] == 'in':
+        vsp_aero_data['x_rel'] = config['x_rel'] * 12
+        vsp_aero_data['b_ref'] = config['wing_span'] * 12
+        vsp_aero_data['s_ref'] = config['wing_area'] * 12 * 12
+        vsp_aero_data['c_ref'] = config['MAC'] * 12
+    elif config['model_unit'] == 'ft':
+        vsp_aero_data['x_rel'] = config['x_rel']
+        vsp_aero_data['b_ref'] = config['wing_span']
+        vsp_aero_data['s_ref'] = config['wing_area']
+        vsp_aero_data['c_ref'] = config['MAC']
+    elif config['model_unit'] == 'm':
+        vsp_aero_data['x_rel'] = config['x_rel'] * 0.3048
+        vsp_aero_data['b_ref'] = config['wing_span'] * 0.3048
+        vsp_aero_data['s_ref'] = config['wing_area'] * 0.3048 * 0.3048
+        vsp_aero_data['c_ref'] = config['MAC'] * 0.3048
+    else:
+        print("[WARNING]: No unit selected, defaulting to feet.")
+        vsp_aero_data['x_rel'] = config['x_rel']
+        vsp_aero_data['b_ref'] = config['wing_span']
+        vsp_aero_data['s_ref'] = config['wing_area']
+        vsp_aero_data['c_ref'] = config['MAC']
 
     # Flight conditions
 
