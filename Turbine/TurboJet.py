@@ -4,17 +4,19 @@ from mpl_toolkits.mplot3d import Axes3D
 
 # T0 is stag or total temp
 # if try to push before pull run:     cd SupersonicUAV    then   git reset --soft HEAD~1
+
+#V1.0.1
 #############################################################################
 class tubojet_calc:
     def __init__(self):
        self.M_2=0.5
        self.nr=0.98
        self.M_3=0.2
-       self.PR=3
+       self.PR=3.8
        self.nc=0.87
        self.M_4=self.M_3
        self.npres=0.95
-       self.T4_0=1600
+       self.T4_0=2180
        self.h_PR=4.61e8
        self.M_5=0.5
        self.nt=0.9
@@ -179,71 +181,8 @@ class tubojet_calc:
 
         return Thrust, T_stations, P_stations, TSFC, mode, Momentum_Thrust, Ram_Drag ,m4_dot,V6, P_thrust
 
-
-
 '''
-vel = np.linspace(0, 1500, 200)   # finer resolution since it's just 1D now, cheap to run
-h_fixed = 5000                     # pick one altitude to slice at
-A2 = 0.05
-
-thirst = tubojet_calc()
-
-Thrust_list = np.zeros(vel.shape)
-TSFC_list = np.zeros(vel.shape)
-Momentum_list = np.zeros(vel.shape)
-RamDrag_list = np.zeros(vel.shape)
-m4dot_list = np.zeros(vel.shape)
-V6_list = np.zeros(vel.shape)
-Pthrust_list = np.zeros(vel.shape)
-
-for i, v in enumerate(vel):
-    F, _, _, TSFC, _, Momentum_Thrust, Ram_Drag, m4_dot, V6, P_thrust = thirst.thrust([h_fixed], np.array([v]), A2)
-    Thrust_list[i] = float(F)
-    TSFC_list[i] = float(TSFC)
-    Momentum_list[i] = float(Momentum_Thrust)
-    RamDrag_list[i] = float(Ram_Drag)
-    m4dot_list[i] = float(m4_dot)
-    V6_list[i] = float(V6)
-    Pthrust_list[i] = float(P_thrust)
-
-fig, axs = plt.subplots(2, 3, figsize=(15, 8))
-
-axs[0,0].plot(vel, Thrust_list)
-axs[0,0].set_title('Thrust')
-axs[0,0].set_xlabel('Velocity (ft/s)')
-axs[0,0].set_ylabel('Total Thrust (lbf)')
-
-axs[0,1].plot(vel, Momentum_list, label='Momentum Thrust')
-axs[0,1].plot(vel, Pthrust_list, label='Ram Drag')
-axs[0,1].set_title('Momentum and Pressure Thrust')
-axs[0,1].set_xlabel('Velocity (ft/s)')
-axs[0,1].set_ylabel('lbf')
-axs[0,1].legend()
-
-axs[0,2].plot(vel, RamDrag_list)
-axs[0,2].set_title('Ram Drag')
-axs[0,2].set_xlabel('Velocity (ft/s)')
-axs[0,2].set_ylabel('lbf')
-
-axs[1,0].plot(vel, m4dot_list)
-axs[1,0].set_title('m4_dot')
-axs[1,0].set_xlabel('Velocity (ft/s)')
-axs[1,0].set_ylabel('slug/s')
-
-axs[1,1].plot(vel, V6_list)
-axs[1,1].set_title('V6')
-axs[1,1].set_xlabel('Velocity (ft/s)')
-axs[1,1].set_ylabel('ft/s')
-
-axs[1,2].plot(vel, TSFC_list)
-axs[1,2].set_title('TSFC')
-axs[1,2].set_xlabel('Velocity (ft/s)')
-axs[1,2].set_ylabel('lb/(lbf·s)')
-
-plt.tight_layout()
-plt.show()
-
-'''
+# Varying Altitude and Speed
 vel = np.linspace(0,1000,100)
 h = np.linspace(0,10000,100)
 A2 = 0.05 # reference area for compressor section
@@ -293,3 +232,83 @@ ax4.set_zlabel('Ram Drag (lbf)')
 
 plt.tight_layout()
 plt.show()
+'''
+
+
+
+'''
+# Varying speed at constant altitude
+vel = np.linspace(0,1000,1000)   # finer resolution since it's just 1D now, cheap to run
+h_fixed = 0                   # pick one altitude to slice at
+A2 = 0.05
+
+thirst = tubojet_calc()
+
+Thrust_list = np.zeros(vel.shape)
+TSFC_list = np.zeros(vel.shape)
+Momentum_list = np.zeros(vel.shape)
+RamDrag_list = np.zeros(vel.shape)
+m4dot_list = np.zeros(vel.shape)
+V6_list = np.zeros(vel.shape)
+Pthrust_list = np.zeros(vel.shape)
+
+for i, v in enumerate(vel):
+
+    F, _, _, TSFC, _, Momentum_Thrust, Ram_Drag, m4_dot, V6, P_thrust = thirst.thrust([h_fixed], np.array([v]), A2)
+    Thrust_list[i] = float(F)
+    TSFC_list[i] = float(TSFC)
+    Momentum_list[i] = float(Momentum_Thrust)
+    RamDrag_list[i] = float(Ram_Drag)
+    m4dot_list[i] = float(m4_dot)
+    V6_list[i] = float(V6)
+    Pthrust_list[i] = float(P_thrust)
+
+fig, axs = plt.subplots(2, 3, figsize=(15, 8))
+
+
+axs[0,0].plot(vel, Thrust_list)
+axs[0,0].set_title('Thrust')
+axs[0,0].set_xlabel('Velocity (ft/s)')
+axs[0,0].set_ylabel('Total Thrust (lbf)')
+
+axs[0,1].plot(vel, Momentum_list, label='Momentum Thrust')
+axs[0,1].plot(vel, Pthrust_list, label='Ram Drag')
+axs[0,1].set_title('Momentum and Pressure Thrust')
+axs[0,1].set_xlabel('Velocity (ft/s)')
+axs[0,1].set_ylabel('lbf')
+axs[0,1].legend()
+
+axs[0,2].plot(vel, RamDrag_list)
+axs[0,2].set_title('Ram Drag')
+axs[0,2].set_xlabel('Velocity (ft/s)')
+axs[0,2].set_ylabel('lbf')
+
+axs[1,0].plot(vel, m4dot_list)
+axs[1,0].set_title('m4_dot')
+axs[1,0].set_xlabel('Velocity (ft/s)')
+axs[1,0].set_ylabel('slug/s')
+
+axs[1,1].plot(vel, V6_list)
+axs[1,1].set_title('V6')
+axs[1,1].set_xlabel('Velocity (ft/s)')
+axs[1,1].set_ylabel('ft/s')
+
+axs[1,2].plot(vel, TSFC_list)
+axs[1,2].set_title('TSFC')
+axs[1,2].set_xlabel('Velocity (ft/s)')
+axs[1,2].set_ylabel('lb/(lbf·s)')
+
+plt.tight_layout()
+plt.show()
+'''
+
+vel = 0   # finer resolution since it's just 1D now, cheap to run
+h_fixed = 0                   # pick one altitude to slice at
+A2 = 0.04014
+
+thirst = tubojet_calc()
+F, _, _, TSFC, _, Momentum_Thrust, Ram_Drag, m4_dot, V6, P_thrust = thirst.thrust([h_fixed], [vel], A2)
+print(F)
+print(m4_dot)
+print(TSFC*F)
+print(V6)
