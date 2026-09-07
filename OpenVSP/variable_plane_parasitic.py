@@ -49,13 +49,13 @@ def run_parasitic_analysis(config):
     if config['model_unit'] == 'in':
         print("Inch selected as model unit.")
         vsp.SetIntAnalysisInput(ANALYSIS_TYPE, "LengthUnit", [3], 0)
-        s_ref = config['wing_area'] * 12
+        s_ref = config['wing_area'] * 12 * 12
     elif config['model_unit'] == 'ft':
         vsp.SetIntAnalysisInput(ANALYSIS_TYPE, "LengthUnit", [4], 0)
         s_ref = config['wing_area']
     elif config['model_unit'] == 'm':
         vsp.SetIntAnalysisInput(ANALYSIS_TYPE, "LengthUnit", [2], 0)
-        s_ref = config['wing_area'] * 0.3048
+        s_ref = config['wing_area'] * 0.3048 * 0.3048
     else:
         print("[WARNING]: No unit selected, defaulting to feet.")
         vsp.SetIntAnalysisInput(ANALYSIS_TYPE, "LengthUnit", [3], 0)
@@ -65,7 +65,7 @@ def run_parasitic_analysis(config):
     vsp.SetIntAnalysisInput(ANALYSIS_TYPE, "LamCfEqnChoice", [0], 0)
 
     # Set turbulent Cf eqn
-    vsp.SetIntAnalysisInput(ANALYSIS_TYPE, "TurbCfEqnChoice", [0], 0)
+    vsp.SetIntAnalysisInput(ANALYSIS_TYPE, "TurbCfEqnChoice", [1], 0)
 
     # Set reference type
     vsp.SetIntAnalysisInput(ANALYSIS_TYPE, "RefFlag", [0], 0)
@@ -144,5 +144,5 @@ def main(config, filename=None):
 
 if __name__ == "__main__":
     filename = "/Users/gabrielkern/Documents/hypersonics/supersonicUAV/OpenVSP/OpenVSPConceptualDesign/Mach1UAV_V2.vsp3"
-    config = {'wing_area':460.937,'mach_start':0.7,'altitude':0,'model_unit':'in'}
+    config = {'wing_area':3.2,'mach_start':0.9,'altitude':0,'model_unit':'in'}
     return_val = main(config, filename)

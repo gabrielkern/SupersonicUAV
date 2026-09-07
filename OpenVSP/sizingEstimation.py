@@ -2,6 +2,7 @@ import sys
 import os
 import csv
 import argparse
+from typing import Union
 from contextlib import contextmanager
 from collections import defaultdict
 import numpy as np
@@ -246,7 +247,7 @@ def build_config(planform_area: float, mach: float, le_sweep_deg: float, altitud
 
     return config
 
-def create_lift_drag_mapper(aero_results: dict, parasitic_drag: float, wave_drag: float):
+def create_lift_drag_mapper(aero_results: dict, parasitic_drag: float, wave_drag: Union[float,list]):
     """Create CL -> total CD interpolation function."""
     total_drag = [cd + parasitic_drag + wave_drag[index] for index,cd in enumerate(aero_results['CD'])]
     return interp1d(aero_results['CL'], total_drag,
@@ -505,7 +506,7 @@ def generate_csv_from_file(vspfile: str, csvoutput: str, altitude_range: tuple, 
             aero_results = variable_plane_analysis.main(config, vspfile)
             max_cl = max(aero_results['CL'])
             parasitic_drag = variable_plane_parasitic.main(config, vspfile)
-            d_wave = wave_drag.transonic_wave_drag(mach, aero_results['CL'], config['thickness'], config['effective_sweep'], config['technology_factor'])
+            d_wave = wave_drag.suave_corrected_wave_drag(config, aero_results['CL'], vspfile)
             lift_drag_mapper = create_lift_drag_mapper(aero_results, parasitic_drag, d_wave) # Returns interp1d object
             cl_arr = np.array(aero_results['CL'])
             cd_induced = np.array(aero_results['CD'])
