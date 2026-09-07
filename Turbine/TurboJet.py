@@ -5,7 +5,7 @@ from mpl_toolkits.mplot3d import Axes3D
 # T0 is stag or total temp
 # if try to push before pull run:     cd SupersonicUAV    then   git reset --soft HEAD~1
 
-#V1.0.1
+#V1.0.2
 #############################################################################
 class tubojet_calc:
     def __init__(self):
@@ -16,14 +16,16 @@ class tubojet_calc:
        self.nc=0.87
        self.M_4=self.M_3
        self.npres=0.95
-       self.T4_0=2180
-       self.h_PR=4.61e8
+       self.T4_0=2126.1
+       self.h_PR=4.00e8
+       self.n_cm = 0.8
        self.M_5=0.5
        self.nt=0.9
        self.GAM=1.4
        self.R=1716
        self.cp=6006
        self.g=32.2
+       self.A2 = 0.04088
 
     def atmosphere(self,h):
         psl = 2116.2
@@ -87,7 +89,7 @@ class tubojet_calc:
 
         return T_stag, P_stag, P_stat, T_stat
 
-    def inlet(self,h,vel,A2):
+    def inlet(self,h,vel):
         T1_stag,P1_stag, P1_stat,T1_stat = self.altitude_corrections(vel,h)
         T2_stag = T1_stag
         P2_stag = self.nr*P1_stag
@@ -95,7 +97,7 @@ class tubojet_calc:
         P2_stat = P2_stag / (1+ (self.GAM-1)/2*self.M_2**2)**(self.GAM/(self.GAM-1))
         rho2_stat = P2_stat / (self.R*T2_stat)
         V2 =  (self.GAM*self.R*T2_stat)**0.5 * self.M_2
-        m_dot = A2 * rho2_stat * V2
+        m_dot = self.A2 * rho2_stat * V2
         return T1_stag,T1_stat,P1_stag,P1_stat,T2_stag,T2_stat,P2_stag,P2_stat,V2,rho2_stat,m_dot
 
     def compressor(self,T2_0,P2_0):
@@ -111,7 +113,7 @@ class tubojet_calc:
         return T3_0,T3,P3_0,P3,V3,rho3_stat,work_comp
 
     def combustion(self,T3_0,P3_0,m_dot):
-        f = self.cp*(self.T4_0-T3_0) / (self.h_PR-self.cp*self.T4_0)
+        f = self.cp*(self.T4_0-T3_0) / (self.n_cm*self.h_PR-self.cp*self.T4_0)
         m4_dot = m_dot*(1+f) # mass flow is added through the fuel pretty cool
         P4_0 = self.npres*P3_0
         T4 = self.T4_0 / (1+ (self.GAM-1)/2*self.M_4**2)
@@ -163,8 +165,8 @@ class tubojet_calc:
 
         return T6_0,T6,P6_0,P6,V6,rho6_stat,Thrust, mode, P_thrust
 
-    def thrust(self, h, vel, A2):
-        T1_stag, T1_stat, P1_stag, P1_stat, T2_stag, T2_stat, P2_stag, P2_stat, V2, rho2_stat, m_dot = self.inlet(h, vel, A2)
+    def thrust(self, h, vel):
+        T1_stag, T1_stat, P1_stag, P1_stat, T2_stag, T2_stat, P2_stag, P2_stat, V2, rho2_stat, m_dot = self.inlet(h, vel)
         T3_0, T3, P3_0, P3, V3, rho3_stat, work_comp = self.compressor(T2_stag, P2_stag)
         T4_0, T4, P4_0, P4, V4, rho4_stat, f, m4_dot = self.combustion(T3_0, P3_0, m_dot)
         T5_0, T5, P5_0, P5, V5, rho5_stat = self.turbine(P4_0, work_comp)
@@ -179,13 +181,12 @@ class tubojet_calc:
         T_stations = [T1_stat, T2_stat, T3, T4, T5, T6]
         P_stations = [P1_stat, P2_stat, P3, P4, P5, P6]
 
-        return Thrust, T_stations, P_stations, TSFC, mode, Momentum_Thrust, Ram_Drag ,m4_dot,V6, P_thrust
+        return Thrust, T_stations, P_stations, TSFC, mode, Momentum_Thrust, Ram_Drag ,m4_dot,V6, P_thrust,m_dot
 
 '''
 # Varying Altitude and Speed
 vel = np.linspace(0,1000,100)
 h = np.linspace(0,10000,100)
-A2 = 0.05 # reference area for compressor section
 vel_mesh,h_mesh = np.meshgrid(vel,h)
 thirst = tubojet_calc()
 
@@ -195,7 +196,7 @@ Momentum_grid = np.zeros(vel_mesh.shape)
 RamDrag_grid = np.zeros(vel_mesh.shape)
 for i in range(vel_mesh.shape[0]):
     for k in range(h_mesh.shape[1]):
-        F, _, _, TSFC,_, Momentum_Thrust,Ram_Drag,m4_dot,V6, P_thrust = thirst.thrust([h_mesh[i,k]], np.array([vel_mesh[i,k]]), A2)
+        F, _, _, TSFC,_, Momentum_Thrust,Ram_Drag,m4_dot,V6, P_thrust,m_dot = thirst.thrust([h_mesh[i,k]], np.array([vel_mesh[i,k]]))
         Thrust_grid[i,k] = float(F)
         TSFC_grid[i,k] = float(TSFC*1e3)
         Momentum_grid[i,k] = float(Momentum_Thrust)
@@ -236,11 +237,10 @@ plt.show()
 
 
 
-'''
+
 # Varying speed at constant altitude
-vel = np.linspace(0,1000,1000)   # finer resolution since it's just 1D now, cheap to run
+vel = np.linspace(0,2000,1000)   # finer resolution since it's just 1D now, cheap to run
 h_fixed = 0                   # pick one altitude to slice at
-A2 = 0.05
 
 thirst = tubojet_calc()
 
@@ -254,7 +254,7 @@ Pthrust_list = np.zeros(vel.shape)
 
 for i, v in enumerate(vel):
 
-    F, _, _, TSFC, _, Momentum_Thrust, Ram_Drag, m4_dot, V6, P_thrust = thirst.thrust([h_fixed], np.array([v]), A2)
+    F, _, _, TSFC, _, Momentum_Thrust, Ram_Drag, m4_dot, V6, P_thrust, m_dot = thirst.thrust([h_fixed], np.array([v]))
     Thrust_list[i] = float(F)
     TSFC_list[i] = float(TSFC)
     Momentum_list[i] = float(Momentum_Thrust)
@@ -304,11 +304,11 @@ plt.show()
 
 vel = 0   # finer resolution since it's just 1D now, cheap to run
 h_fixed = 0                   # pick one altitude to slice at
-A2 = 0.04014
+
 
 thirst = tubojet_calc()
-F, _, _, TSFC, _, Momentum_Thrust, Ram_Drag, m4_dot, V6, P_thrust = thirst.thrust([h_fixed], [vel], A2)
+F, _, _, TSFC, _, Momentum_Thrust, Ram_Drag, m4_dot, V6, P_thrust, m_dot = thirst.thrust([h_fixed], [vel])
 print(F)
-print(m4_dot)
+print(m_dot)
 print(TSFC*F)
-print(V6)
+'''
