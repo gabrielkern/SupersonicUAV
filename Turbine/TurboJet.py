@@ -239,7 +239,7 @@ plt.show()
 
 
 # Varying speed at constant altitude
-vel = np.linspace(0,2000,1000)   # finer resolution since it's just 1D now, cheap to run
+vel = np.linspace(0,2500,100)   # finer resolution since it's just 1D now, cheap to run
 h_fixed = 0                   # pick one altitude to slice at
 
 thirst = tubojet_calc()
@@ -272,7 +272,7 @@ axs[0,0].set_xlabel('Velocity (ft/s)')
 axs[0,0].set_ylabel('Total Thrust (lbf)')
 
 axs[0,1].plot(vel, Momentum_list, label='Momentum Thrust')
-axs[0,1].plot(vel, Pthrust_list, label='Ram Drag')
+axs[0,1].plot(vel, Pthrust_list, label='Pressure Thrust')
 axs[0,1].set_title('Momentum and Pressure Thrust')
 axs[0,1].set_xlabel('Velocity (ft/s)')
 axs[0,1].set_ylabel('lbf')
