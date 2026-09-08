@@ -172,7 +172,7 @@ class tubojet_calc:
         T5_0, T5, P5_0, P5, V5, rho5_stat = self.turbine(P4_0, work_comp)
         T6_0, T6, P6_0, P6, V6, rho6_stat, Thrust, mode, P_thrust = self.nozzle(T5_0, P5_0, h, m4_dot, m_dot, vel)
         if Thrust>0:
-            TSFC = f*m_dot*self.g / Thrust # pounds/s
+            TSFC = f*m_dot*self.g / Thrust *3600 # pounds/s
         else:
             TSFC=0
 
@@ -296,7 +296,7 @@ axs[1,1].set_ylabel('ft/s')
 axs[1,2].plot(vel, TSFC_list)
 axs[1,2].set_title('TSFC')
 axs[1,2].set_xlabel('Velocity (ft/s)')
-axs[1,2].set_ylabel('lb/(lbf·s)')
+axs[1,2].set_ylabel('lb/(lbf·hr)')
 
 plt.tight_layout()
 plt.show()
