@@ -22,7 +22,7 @@ def load_degen_geom(filepath):
                     parts = inner_line.split(',')
                     n_xsecs = int(parts[1])
                     n_pnts = int(parts[2])
-                    data_start = j + 2  # skip the "# x,y,z,u,w" comment line
+                    data_start = j + 2  # skip the x,y,z,u,w comment line (annoying ah line)
 
                     data_lines = lines[data_start : data_start + n_xsecs * n_pnts]
                     rows = [[float(v) for v in row.split(',')] for row in data_lines]
@@ -39,7 +39,7 @@ def load_degen_geom(filepath):
 
                     # station spacing: distance between consecutive ring centroids
                     centroids = xyz.mean(axis=1)
-                    station_spacing = np.linalg.norm(np.diff(centroids, axis=0), axis=1)
+                    station_spacing = np.linalg.norm(np.diff(centroids, axis=0), axis=1) # pain in the ah to wrap my head around
 
                     # panel widths: distance between consecutive perimeter points, per station
                     diffs = np.diff(xyz, axis=1)
@@ -81,7 +81,7 @@ ax.set_ylabel('Y (spanwise)')
 ax.set_zlabel('Z (vertical)')
 ax.set_title('DegenGeom Reconstruction - Cross Sections by Component')
 
-# equal aspect ratio so the geometry isn't visually distorted
+# equal aspect ratio so the geometry isn't visually distorted (shoutout claude on this)
 all_pts = np.vstack([d['xyz'].reshape(-1, 3) for d in comps.values()])
 max_range = (all_pts.max(axis=0) - all_pts.min(axis=0)).max() / 2.0
 mid = all_pts.mean(axis=0)
