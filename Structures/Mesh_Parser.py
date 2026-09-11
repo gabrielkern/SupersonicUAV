@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def load_degen_geom(filepath):
+def Mesh_Parser_func(filepath):
     with open(filepath, 'r') as f:
         lines = f.readlines()
 
@@ -55,8 +55,8 @@ def load_degen_geom(filepath):
 
     return components
 
-
-comps = load_degen_geom("./SupersonicUAV/Structures/Mach1UAV_V2_DegenGeom.csv")
+'''
+comps = Mesh_Parser_func("./SupersonicUAV/Structures/Mach1UAV_V2_DegenGeom.csv")
 
 fig = plt.figure(figsize=(14, 8))
 ax = fig.add_subplot(111, projection='3d')
@@ -92,3 +92,4 @@ ax.view_init(elev=25, azim=-50)
 
 plt.tight_layout()
 plt.show()
+'''
